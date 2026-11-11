@@ -108,3 +108,75 @@ class Meta(BaseModel):
 class EventosPagina(BaseModel):
     data: list[EventoOut]
     meta: Meta
+
+
+# ---------------------------------------------------------------- Sprint 2
+from app.enums import EstadoCompromiso  # noqa: E402
+
+
+class EventoPatch(BaseModel):
+    """CU-04 y CU-05: activar/quitar seguimiento, responsable y prioridad."""
+
+    requiere_seguimiento: bool | None = None
+    responsable_id: uuid.UUID | None = None
+    prioridad: Prioridad | None = None
+    nota: str | None = Field(default=None, max_length=5000)
+
+
+class CambioEstadoIn(BaseModel):
+    estado: Estado
+    nota: str | None = Field(default=None, max_length=5000)
+    # Al cerrar con compromisos pendientes: "cumplir" o "cancelar". Sin esto, el cierre se rechaza.
+    resolver_compromisos: str | None = Field(default=None, pattern="^(cumplir|cancelar)$")
+
+
+class SeguimientoIn(BaseModel):
+    nota: str = Field(min_length=1, max_length=5000)
+
+
+class SeguimientoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    autor: UsuarioRef
+    nota: str
+    estado_anterior: Estado | None
+    estado_nuevo: Estado | None
+    creado_en: datetime
+
+
+class CompromisoIn(BaseModel):
+    descripcion: str = Field(min_length=1, max_length=2000)
+    fecha_limite: date
+    responsable_id: uuid.UUID | None = None  # por defecto, quien lo registra
+
+
+class CompromisoPatch(BaseModel):
+    estado: EstadoCompromiso
+
+
+class CompromisoOut(BaseModel):
+    id: uuid.UUID
+    evento_folio: str
+    descripcion: str
+    responsable: UsuarioRef
+    fecha_limite: date
+    estado: EstadoCompromiso
+    vencido: bool  # calculado: pendiente y con fecha límite anterior a hoy
+    cumplido_en: datetime | None
+    creado_en: datetime
+
+
+class CompromisoPendienteOut(CompromisoOut):
+    evento_titulo: str
+    evento_tipo: Tipo
+
+
+class EventoDetalleOut(EventoOut):
+    # Solo se llenan si se pide ?incluir=seguimientos,compromisos
+    seguimientos: list[SeguimientoOut] | None = None
+    compromisos: list[CompromisoOut] | None = None
+
+
+class PendientesOut(BaseModel):
+    eventos: list[EventoOut]
+    compromisos: list[CompromisoPendienteOut]

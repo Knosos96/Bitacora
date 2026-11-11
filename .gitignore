@@ -1,31 +1,4 @@
-# Entornos virtuales
 .venv/
-env/
-venv/
-ENV/
-
-# Python cache & bytecode
 __pycache__/
-*.py[cod]
-*$py.class
-*.pyc
-
-# Variables de entorno y secretos
 .env
-
-# Bases de datos locales
-*.db
-*.sqlite
-*.sqlite3
-bitacora.db
-
-# Pruebas & logs
 .pytest_cache/
-.coverage
-htmlcov/
-*.log
-
-# IDEs
-.idea/
-.vscode/
-*.swp

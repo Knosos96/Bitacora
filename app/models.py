@@ -1,11 +1,11 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, Uuid
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, Uuid, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
-from app.enums import Estado, Prioridad, Rol, Tipo
+from app.enums import Estado, EstadoCompromiso, Prioridad, Rol, Tipo
 
 
 def _enum(e, nombre):
@@ -75,3 +75,52 @@ class Evento(Base):
     area: Mapped[Area | None] = relationship()
     autor: Mapped[Usuario] = relationship(foreign_keys=[autor_id])
     responsable: Mapped[Usuario | None] = relationship(foreign_keys=[responsable_id])
+
+
+class Seguimiento(Base):
+    """Nota de seguimiento. Inmutable: no se edita ni se borra (ver el listener al final)."""
+
+    __tablename__ = "seguimiento"
+    __table_args__ = (Index("ix_seguimiento_evento", "evento_id", "creado_en"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    evento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evento.id"))
+    autor_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("usuario.id"))
+    nota: Mapped[str] = mapped_column(Text)
+    estado_anterior: Mapped[Estado | None] = mapped_column(_enum(Estado, "estado_evento"))
+    estado_nuevo: Mapped[Estado | None] = mapped_column(_enum(Estado, "estado_evento"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+    autor: Mapped[Usuario] = relationship(foreign_keys=[autor_id])
+
+
+class Compromiso(Base):
+    __tablename__ = "compromiso"
+    __table_args__ = (
+        Index("ix_compromiso_evento", "evento_id"),
+        Index("ix_compromiso_estado_fecha", "estado", "fecha_limite"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    evento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evento.id"))
+    descripcion: Mapped[str] = mapped_column(Text)
+    responsable_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("usuario.id"))
+    fecha_limite: Mapped[date] = mapped_column(Date)
+    estado: Mapped[EstadoCompromiso] = mapped_column(
+        _enum(EstadoCompromiso, "estado_compromiso"), default=EstadoCompromiso.pendiente
+    )
+    cumplido_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+    evento: Mapped[Evento] = relationship(foreign_keys=[evento_id])
+    responsable: Mapped[Usuario] = relationship(foreign_keys=[responsable_id])
+
+
+@event.listens_for(Seguimiento, "before_update")
+def _nota_inmutable_update(*_):
+    raise ValueError("Las notas de seguimiento no se editan; agrega otra nota.")
+
+
+@event.listens_for(Seguimiento, "before_delete")
+def _nota_inmutable_delete(*_):
+    raise ValueError("Las notas de seguimiento no se eliminan.")

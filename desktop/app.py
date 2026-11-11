@@ -4,7 +4,7 @@ Habla con la API (uvicorn app.main:app) y no toca la base de datos directamente.
 """
 import tkinter as tk
 from datetime import date
-from tkinter import messagebox, ttk
+from tkinter import messagebox, simpledialog, ttk
 
 from app.enums import SUBTIPOS, Tipo
 from desktop.api_client import ClienteApi, ErrorApi
@@ -77,6 +77,7 @@ class Principal(tk.Tk):
                      state="readonly").pack(side="left", padx=4)
         ttk.Button(f, text="Buscar", command=self.recargar).pack(side="left", padx=6)
         ttk.Button(f, text="Hoy", command=self.ir_a_hoy).pack(side="left")
+        ttk.Button(f, text="Pendientes", command=lambda: Pendientes(self, self.c)).pack(side="left", padx=6)
         self.total = ttk.Label(f, text="")
         self.total.pack(side="right")
 
@@ -117,29 +118,8 @@ class Principal(tk.Tk):
 
     def ver_detalle(self, _evento):
         sel = self.tabla.selection()
-        if not sel:
-            return
-        try:
-            e = self.c.evento(sel[0])
-        except ErrorApi as ex:
-            messagebox.showerror("Error", str(ex), parent=self)
-            return
-        v = tk.Toplevel(self)
-        v.title(e["folio"])
-        v.geometry("520x420")
-        t = tk.Text(v, wrap="word", padx=10, pady=10)
-        t.pack(fill="both", expand=True)
-        lineas = [
-            f"{e['folio']}  ·  {e['tipo']}" + (f" / {e['subtipo']}" if e["subtipo"] else ""),
-            f"Fecha del hecho: {e['fecha_hecho']}",
-            f"Estado: {e['estado']}" + (f"   Prioridad: {e['prioridad']}" if e["prioridad"] else ""),
-            f"Área: {(e['area_origen'] or {}).get('nombre', '—')}   Solicitante: {e['solicitante'] or '—'}",
-            f"Registró: {e['autor']['nombre']}   Responsable: {(e['responsable'] or {}).get('nombre', '—')}",
-            f"Referencia: {e['referencia'] or '—'}",
-            "", e["titulo"], "", e["descripcion"],
-        ]
-        t.insert("1.0", "\n".join(lineas))
-        t.config(state="disabled")
+        if sel:
+            Detalle(self, self.c, sel[0], al_cambiar=self.recargar)
 
     # --- alta rápida ---------------------------------------------------
     def _armar_alta(self):
@@ -212,6 +192,221 @@ class Principal(tk.Tk):
         self.n_seg.set(False)
         self.ir_a_hoy()
         messagebox.showinfo("Guardado", f"Evento registrado: {e['folio']}", parent=self)
+
+
+ESTADOS_SIGUIENTES = {
+    "abierto": ["en_proceso", "en_espera", "resuelto", "cancelado"],
+    "en_proceso": ["en_espera", "resuelto", "cerrado", "cancelado"],
+    "en_espera": ["en_proceso", "resuelto", "cerrado", "cancelado"],
+    "resuelto": ["en_proceso", "cerrado"],
+}
+
+
+class Detalle(tk.Toplevel):
+    """Ficha del evento: notas, compromisos y cambio de estado. El servidor decide qué se permite."""
+
+    def __init__(self, padre, cliente: ClienteApi, folio: str, al_cambiar=None):
+        super().__init__(padre)
+        self.c, self.folio, self.al_cambiar = cliente, folio, al_cambiar
+        self.title(folio)
+        self.geometry("720x720")
+        self.ficha = tk.Text(self, wrap="word", height=10, padx=10, pady=8)
+        self.ficha.pack(fill="x")
+
+        barra = ttk.Frame(self, padding=(10, 6))
+        barra.pack(fill="x")
+        self.sig = tk.StringVar()
+        self.cb_estado = ttk.Combobox(barra, textvariable=self.sig, width=12, state="readonly")
+        self.cb_estado.pack(side="left")
+        ttk.Button(barra, text="Cambiar estado", command=self.cambiar_estado).pack(side="left", padx=4)
+        self.btn_seg = ttk.Button(barra, text="Activar seguimiento", command=self.alternar_seguimiento)
+        self.btn_seg.pack(side="right")
+
+        ttk.Label(self, text="Historial de notas", padding=(10, 4)).pack(anchor="w")
+        self.notas = tk.Text(self, wrap="word", height=10, padx=10, state="disabled")
+        self.notas.pack(fill="both", expand=True, padx=10)
+        fila = ttk.Frame(self, padding=(10, 6))
+        fila.pack(fill="x")
+        self.n_nota = tk.StringVar()
+        e = ttk.Entry(fila, textvariable=self.n_nota)
+        e.pack(side="left", fill="x", expand=True)
+        e.bind("<Return>", lambda _e: self.agregar_nota())
+        ttk.Button(fila, text="Agregar nota", command=self.agregar_nota).pack(side="left", padx=4)
+
+        ttk.Label(self, text="Compromisos", padding=(10, 4)).pack(anchor="w")
+        self.tabla = ttk.Treeview(self, columns=("fecha", "desc", "resp", "estado"), show="headings", height=4)
+        for k, t, a in (("fecha", "Fecha límite", 100), ("desc", "Compromiso", 330), ("resp", "Responsable", 110), ("estado", "Estado", 90)):
+            self.tabla.heading(k, text=t)
+            self.tabla.column(k, width=a, anchor="w")
+        self.tabla.pack(fill="x", padx=10)
+        fila = ttk.Frame(self, padding=(10, 6))
+        fila.pack(fill="x")
+        self.c_desc, self.c_fecha = tk.StringVar(), tk.StringVar(value=date.today().isoformat())
+        ttk.Entry(fila, textvariable=self.c_desc).pack(side="left", fill="x", expand=True)
+        ttk.Entry(fila, textvariable=self.c_fecha, width=11).pack(side="left", padx=4)
+        ttk.Button(fila, text="Agregar", command=self.agregar_compromiso).pack(side="left")
+        ttk.Button(fila, text="Marcar cumplido", command=lambda: self.resolver("cumplido")).pack(side="left", padx=4)
+        ttk.Button(fila, text="Cancelar", command=lambda: self.resolver("cancelado")).pack(side="left")
+        self.cargar()
+
+    def _error(self, ex):
+        messagebox.showerror("No se pudo", str(ex), parent=self)
+
+    def _avisar(self):
+        self.cargar()
+        if self.al_cambiar:
+            self.al_cambiar()
+
+    def cargar(self):
+        try:
+            self.e = self.c.evento_completo(self.folio)
+        except ErrorApi as ex:
+            self._error(ex)
+            return
+        e = self.e
+        lineas = [
+            f"{e['folio']}  ·  {e['tipo']}" + (f" / {e['subtipo']}" if e["subtipo"] else ""),
+            f"Fecha del hecho: {e['fecha_hecho']}",
+            f"Estado: {e['estado']}" + (f"   Prioridad: {e['prioridad']}" if e["prioridad"] else ""),
+            f"Área: {(e['area_origen'] or {}).get('nombre', '—')}   Solicitante: {e['solicitante'] or '—'}",
+            f"Registró: {e['autor']['nombre']}   Responsable: {(e['responsable'] or {}).get('nombre', '—')}",
+            f"Referencia: {e['referencia'] or '—'}",
+            "", e["titulo"], "", e["descripcion"],
+        ]
+        self.ficha.config(state="normal")
+        self.ficha.delete("1.0", "end")
+        self.ficha.insert("1.0", "\n".join(lineas))
+        self.ficha.config(state="disabled")
+
+        self.cb_estado.config(values=ESTADOS_SIGUIENTES.get(e["estado"], []))
+        self.sig.set("")
+        self.btn_seg.config(text="Quitar seguimiento" if e["requiere_seguimiento"] else "Activar seguimiento")
+
+        self.notas.config(state="normal")
+        self.notas.delete("1.0", "end")
+        for n in e["seguimientos"]:
+            self.notas.insert("end", f"[{n['creado_en'][:16].replace('T', ' ')}] {n['autor']['nombre']}: {n['nota']}\n")
+        self.notas.config(state="disabled")
+        self.notas.see("end")
+
+        self.tabla.delete(*self.tabla.get_children())
+        for c in e["compromisos"]:
+            est = "VENCIDO" if c["vencido"] else c["estado"]
+            self.tabla.insert("", "end", iid=c["id"], values=(c["fecha_limite"], c["descripcion"], c["responsable"]["nombre"], est))
+
+    def cambiar_estado(self):
+        if not self.sig.get():
+            return
+        nota = simpledialog.askstring("Nota", "Nota del cambio (obligatoria para en_espera y para cerrar con atajo):", parent=self)
+        try:
+            try:
+                self.c.cambiar_estado(self.folio, self.sig.get(), nota)
+            except ErrorApi as ex:
+                if "compromiso" in str(ex).lower() and "pendiente" in str(ex).lower():
+                    op = messagebox.askyesnocancel(
+                        "Compromisos pendientes",
+                        f"{ex}\n\nSí = marcarlos cumplidos · No = cancelarlos · Cancelar = no cerrar", parent=self)
+                    if op is None:
+                        return
+                    self.c.cambiar_estado(self.folio, self.sig.get(), nota, "cumplir" if op else "cancelar")
+                else:
+                    raise
+        except ErrorApi as ex:
+            self._error(ex)
+            return
+        self._avisar()
+
+    def alternar_seguimiento(self):
+        try:
+            self.c.modificar_evento(self.folio, {"requiere_seguimiento": not self.e["requiere_seguimiento"]})
+        except ErrorApi as ex:
+            self._error(ex)
+            return
+        self._avisar()
+
+    def agregar_nota(self):
+        texto = self.n_nota.get().strip()
+        if not texto:
+            return
+        try:
+            self.c.agregar_nota(self.folio, texto)
+        except ErrorApi as ex:
+            self._error(ex)
+            return
+        self.n_nota.set("")
+        self._avisar()
+
+    def agregar_compromiso(self):
+        if not self.c_desc.get().strip():
+            return
+        try:
+            self.c.crear_compromiso(self.folio, self.c_desc.get().strip(), self.c_fecha.get().strip())
+        except ErrorApi as ex:
+            self._error(ex)
+            return
+        self.c_desc.set("")
+        self._avisar()
+
+    def resolver(self, estado):
+        sel = self.tabla.selection()
+        if not sel:
+            return
+        try:
+            self.c.resolver_compromiso(sel[0], estado)
+        except ErrorApi as ex:
+            self._error(ex)
+            return
+        self._avisar()
+
+
+class Pendientes(tk.Toplevel):
+    """CU-15: eventos con seguimiento sin cerrar y compromisos abiertos."""
+
+    def __init__(self, padre, cliente: ClienteApi):
+        super().__init__(padre)
+        self.c = cliente
+        self.title("Pendientes")
+        self.geometry("900x520")
+        barra = ttk.Frame(self, padding=8)
+        barra.pack(fill="x")
+        self.venc = tk.BooleanVar()
+        ttk.Checkbutton(barra, text="Solo vencidos", variable=self.venc, command=self.cargar).pack(side="left")
+        ttk.Button(barra, text="Actualizar", command=self.cargar).pack(side="left", padx=8)
+
+        ttk.Label(self, text="Eventos con seguimiento", padding=(8, 0)).pack(anchor="w")
+        self.t_ev = ttk.Treeview(self, columns=("folio", "tipo", "titulo", "estado", "resp"), show="headings", height=8)
+        for k, t, a in (("folio", "Folio", 110), ("tipo", "Tipo", 90), ("titulo", "Título", 380), ("estado", "Estado", 100), ("resp", "Responsable", 130)):
+            self.t_ev.heading(k, text=t)
+            self.t_ev.column(k, width=a, anchor="w")
+        self.t_ev.pack(fill="both", expand=True, padx=8)
+        self.t_ev.bind("<Double-1>", lambda _e: self._abrir(self.t_ev))
+
+        ttk.Label(self, text="Compromisos pendientes", padding=(8, 6, 8, 0)).pack(anchor="w")
+        self.t_co = ttk.Treeview(self, columns=("fecha", "folio", "desc", "resp", "estado"), show="headings", height=8)
+        for k, t, a in (("fecha", "Fecha límite", 100), ("folio", "Evento", 110), ("desc", "Compromiso", 360), ("resp", "Responsable", 130), ("estado", "", 80)):
+            self.t_co.heading(k, text=t)
+            self.t_co.column(k, width=a, anchor="w")
+        self.t_co.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        self.t_co.bind("<Double-1>", lambda _e: self._abrir(self.t_co, col=1))
+        self.cargar()
+
+    def _abrir(self, tabla, col=0):
+        sel = tabla.selection()
+        if sel:
+            Detalle(self, self.c, tabla.item(sel[0])["values"][col], al_cambiar=self.cargar)
+
+    def cargar(self):
+        try:
+            r = self.c.pendientes(solo_vencidos=self.venc.get())
+        except ErrorApi as ex:
+            messagebox.showerror("Error", str(ex), parent=self)
+            return
+        self.t_ev.delete(*self.t_ev.get_children())
+        for e in r["eventos"]:
+            self.t_ev.insert("", "end", values=(e["folio"], e["tipo"], e["titulo"], e["estado"], (e["responsable"] or {}).get("nombre", "—")))
+        self.t_co.delete(*self.t_co.get_children())
+        for c in r["compromisos"]:
+            self.t_co.insert("", "end", values=(c["fecha_limite"], c["evento_folio"], c["descripcion"], c["responsable"]["nombre"], "VENCIDO" if c["vencido"] else ""))
 
 
 def main():

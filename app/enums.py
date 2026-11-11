@@ -25,6 +25,12 @@ class Estado(str, enum.Enum):
     cancelado = "cancelado"
 
 
+class EstadoCompromiso(str, enum.Enum):
+    pendiente = "pendiente"
+    cumplido = "cumplido"
+    cancelado = "cancelado"
+
+
 class Prioridad(str, enum.Enum):
     baja = "baja"
     media = "media"

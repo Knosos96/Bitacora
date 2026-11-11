@@ -1,32 +1,36 @@
 services:
-
   db:
     image: postgres:16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: bitacora
-      POSTGRES_PASSWORD: bitacora
-      POSTGRES_DB: bitacora
+      POSTGRES_USER: ${POSTGRES_USER:-bitacora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bitacora}
+      POSTGRES_DB: ${POSTGRES_DB:-bitacora}
+      TZ: UTC
     ports: ["5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bitacora"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
-      timeout: 5s
+      timeout: 3s
       retries: 10
 
   api:
     build: .
     restart: unless-stopped
-    ports: ["8000:8000"]
-    environment:
-      DATABASE_URL: postgresql+psycopg://bitacora:bitacora@db:5432/bitacora
-      SECRET_KEY: cambia-esto-por-una-cadena-larga-y-aleatoria
-      ZONA_HORARIA: America/Bogota
-      TOKEN_HORAS: "12"
     depends_on:
       db:
         condition: service_healthy
+    environment:
+      # Dentro de la red de Docker el host de la base es "db", no "localhost".
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-bitacora}:${POSTGRES_PASSWORD:-bitacora}@db:5432/${POSTGRES_DB:-bitacora}
+      SECRET_KEY: ${SECRET_KEY:-dev-inseguro-cambiar}
+      ZONA_HORARIA: ${ZONA_HORARIA:-America/Bogota}
+      TOKEN_HORAS: ${TOKEN_HORAS:-12}
+      SEED_JEFE_CORREO: ${SEED_JEFE_CORREO:-}
+      SEED_JEFE_NOMBRE: ${SEED_JEFE_NOMBRE:-}
+      SEED_JEFE_CLAVE: ${SEED_JEFE_CLAVE:-}
+    ports: ["8000:8000"]
 
 volumes:
   pgdata:

@@ -9,10 +9,11 @@ class ErrorApi(Exception):
 class ClienteApi:
     def __init__(self, base_url: str, http: httpx.Client | None = None):
         # `http` permite inyectar un cliente (las pruebas usan el TestClient de FastAPI).
-        self.http = http or httpx.Client(base_url=base_url.rstrip("/") + "/api/v1", timeout=10)
+        self.http = http or httpx.Client(base_url=base_url.rstrip("/") + "/api/v1/", timeout=10)
         self.usuario: dict | None = None
 
     def _pedir(self, metodo: str, ruta: str, **kw):
+        ruta = ruta.lstrip("/")
         try:
             r = self.http.request(metodo, ruta, **kw)
         except httpx.HTTPError as e:
@@ -53,3 +54,28 @@ class ClienteApi:
 
     def crear_evento(self, datos: dict) -> dict:
         return self._pedir("POST", "/eventos", json=datos)
+
+    # --- Sprint 2 ---------------------------------------------------------
+    def evento_completo(self, folio: str) -> dict:
+        return self._pedir("GET", f"/eventos/{folio}", params={"incluir": "seguimientos,compromisos"})
+
+    def modificar_evento(self, folio: str, datos: dict) -> dict:
+        return self._pedir("PATCH", f"/eventos/{folio}", json=datos)
+
+    def cambiar_estado(self, folio: str, estado: str, nota: str | None = None,
+                       resolver_compromisos: str | None = None) -> dict:
+        cuerpo = {"estado": estado, "nota": nota or None, "resolver_compromisos": resolver_compromisos}
+        return self._pedir("POST", f"/eventos/{folio}/estado", json=cuerpo)
+
+    def agregar_nota(self, folio: str, nota: str) -> dict:
+        return self._pedir("POST", f"/eventos/{folio}/seguimientos", json={"nota": nota})
+
+    def crear_compromiso(self, folio: str, descripcion: str, fecha_limite: str, responsable_id: str | None = None) -> dict:
+        cuerpo = {"descripcion": descripcion, "fecha_limite": fecha_limite, "responsable_id": responsable_id}
+        return self._pedir("POST", f"/eventos/{folio}/compromisos", json=cuerpo)
+
+    def resolver_compromiso(self, compromiso_id: str, estado: str) -> dict:
+        return self._pedir("PATCH", f"/compromisos/{compromiso_id}", json={"estado": estado})
+
+    def pendientes(self, solo_mios: bool = False, solo_vencidos: bool = False) -> dict:
+        return self._pedir("GET", "/pendientes", params={"solo_mios": solo_mios, "solo_vencidos": solo_vencidos})
