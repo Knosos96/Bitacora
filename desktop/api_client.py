@@ -1,0 +1,55 @@
+"""Cliente de la API de Bitácora TI. Sin interfaz: se puede probar solo."""
+import httpx
+
+
+class ErrorApi(Exception):
+    pass
+
+
+class ClienteApi:
+    def __init__(self, base_url: str, http: httpx.Client | None = None):
+        # `http` permite inyectar un cliente (las pruebas usan el TestClient de FastAPI).
+        self.http = http or httpx.Client(base_url=base_url.rstrip("/") + "/api/v1", timeout=10)
+        self.usuario: dict | None = None
+
+    def _pedir(self, metodo: str, ruta: str, **kw):
+        try:
+            r = self.http.request(metodo, ruta, **kw)
+        except httpx.HTTPError as e:
+            raise ErrorApi(f"No se pudo conectar con el servidor: {e}") from e
+        if r.status_code >= 400:
+            try:
+                d = r.json().get("detail", r.text)
+            except ValueError:
+                d = r.text
+            if isinstance(d, list):  # error de validación 422
+                d = "; ".join(x.get("msg", "") for x in d)
+            if isinstance(d, dict):
+                d = d.get("detalle", str(d))
+            raise ErrorApi(str(d))
+        return r.json()
+
+    def login(self, correo: str, clave: str) -> dict:
+        d = self._pedir("POST", "/auth/login", json={"correo": correo, "clave": clave})
+        self.http.headers["Authorization"] = f"Bearer {d['token']}"
+        self.usuario = d["usuario"]
+        return self.usuario
+
+    def areas(self) -> list[dict]:
+        return self._pedir("GET", "/areas")
+
+    def eventos(self, desde=None, hasta=None, tipos=None, page_size=200) -> dict:
+        p = {"page_size": page_size}
+        if desde:
+            p["desde"] = desde
+        if hasta:
+            p["hasta"] = hasta
+        if tipos:
+            p["tipo"] = tipos
+        return self._pedir("GET", "/eventos", params=p)
+
+    def evento(self, folio: str) -> dict:
+        return self._pedir("GET", f"/eventos/{folio}")
+
+    def crear_evento(self, datos: dict) -> dict:
+        return self._pedir("POST", "/eventos", json=datos)

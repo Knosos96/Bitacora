@@ -1,0 +1,32 @@
+services:
+
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bitacora
+      POSTGRES_PASSWORD: bitacora
+      POSTGRES_DB: bitacora
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bitacora"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://bitacora:bitacora@db:5432/bitacora
+      SECRET_KEY: cambia-esto-por-una-cadena-larga-y-aleatoria
+      ZONA_HORARIA: America/Bogota
+      TOKEN_HORAS: "12"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
