@@ -15,6 +15,7 @@ Docs de la API: http://localhost:8000/api/v1/docs
 Comandos útiles:
 ```bash
 docker compose logs -f api                       # ver el log
+docker compose exec api python -m scripts.crear_usuario usuario@correo.com "Nombre" "clave123" asistente
 docker compose exec db psql -U bitacora         # consola SQL
 docker compose down                              # apagar (los datos quedan en el volumen pgdata)
 docker compose down -v                           # apagar Y borrar la base
