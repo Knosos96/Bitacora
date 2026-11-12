@@ -13,9 +13,8 @@ class ClienteApi:
         self.usuario: dict | None = None
 
     def _pedir(self, metodo: str, ruta: str, **kw):
-        ruta = ruta.lstrip("/")
         try:
-            r = self.http.request(metodo, ruta, **kw)
+            r = self.http.request(metodo, ruta.lstrip("/"), **kw)
         except httpx.HTTPError as e:
             raise ErrorApi(f"No se pudo conectar con el servidor: {e}") from e
         if r.status_code >= 400:
@@ -79,3 +78,23 @@ class ClienteApi:
 
     def pendientes(self, solo_mios: bool = False, solo_vencidos: bool = False) -> dict:
         return self._pedir("GET", "/pendientes", params={"solo_mios": solo_mios, "solo_vencidos": solo_vencidos})
+
+    # --- Sprints 3 y 4 ----------------------------------------------------
+    def buscar(self, **filtros) -> dict:
+        """GET /eventos con q, desde, hasta, tipo, estado, seguimiento, vencidos, area_id, responsable_id..."""
+        params = {k: v for k, v in filtros.items() if v not in (None, "", [])}
+        return self._pedir("GET", "/eventos", params=params)
+
+    def evento_con_auditoria(self, folio: str) -> dict:
+        return self._pedir("GET", f"/eventos/{folio}", params={"incluir": "seguimientos,compromisos,auditoria"})
+
+    def corregir_evento(self, folio: str, cambios: dict) -> dict:
+        return self._pedir("PATCH", f"/eventos/{folio}", json=cambios)
+
+    def tablero(self, desde: str | None = None, hasta: str | None = None) -> dict:
+        params = {k: v for k, v in (("desde", desde), ("hasta", hasta)) if v}
+        return self._pedir("GET", "/kpi", params=params)
+
+    def lista_kpi(self, kid: str, desde: str | None = None, hasta: str | None = None, clave: str | None = None) -> dict:
+        params = {k: v for k, v in (("desde", desde), ("hasta", hasta), ("clave", clave)) if v}
+        return self._pedir("GET", f"/kpi/{kid}", params=params)

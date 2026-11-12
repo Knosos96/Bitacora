@@ -9,15 +9,18 @@ from sqlalchemy.orm import Session, joinedload
 from app.config import settings
 from app.db import get_db
 from app.deps import usuario_actual
-from app.enums import Estado, EstadoCompromiso, Prioridad, Rol, Tipo
+from app.busqueda import condicion_busqueda, es_folio, fragmento, reindexar
+from app.enums import SUBTIPOS, Estado, EstadoCompromiso, Prioridad, Rol, Tipo
 from app.estados import ASISTENTE_PUEDE, CIERRE_CON_ATAJO, es_gestor, transicion_valida
 from app.folio import siguiente_folio
-from app.models import Area, Compromiso, Evento, Seguimiento, Usuario, _ahora
+from app.models import Area, Auditoria, Compromiso, Evento, Seguimiento, Usuario, _ahora
 from app.schemas import (
     AreaRef,
+    AuditoriaOut,
     CambioEstadoIn,
     CompromisoIn,
     CompromisoOut,
+    EventoBusquedaOut,
     EventoDetalleOut,
     EventoIn,
     EventoOut,
@@ -104,6 +107,7 @@ def crear_evento(
         responsable_id=responsable_id,
     )
     db.add(evento)
+    reindexar(db, evento)
     db.commit()
     evento = db.scalars(_con_relaciones().where(Evento.id == evento.id)).unique().one()
     return a_salida(evento)
@@ -115,26 +119,62 @@ def listar_eventos(
     hasta: date | None = None,
     tipo: list[Tipo] = Query(default=[]),
     estado: list[Estado] = Query(default=[]),
+    q: str | None = Query(None, description="Texto a buscar (CU-11) o un folio"),
+    area_id: uuid.UUID | None = None,
+    responsable_id: uuid.UUID | None = None,
+    seguimiento: str | None = Query(None, pattern="^(con|sin)$"),
+    vencidos: bool = Query(False, description="Solo eventos con compromisos pendientes vencidos"),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     _: Usuario = Depends(usuario_actual),
 ):
-    # Sin fechas, la pantalla Hoy: el día operativo del área.
-    if desde is None and hasta is None:
-        desde = hasta = hoy_en_zona()
-    desde = desde or hasta
-    hasta = hasta or desde
-    if desde > hasta:
-        raise HTTPException(400, "'desde' no puede ser posterior a 'hasta'")
-    if (hasta - desde).days > 366:
-        raise HTTPException(400, "El rango máximo es de 366 días")
+    """CU-11 y CU-12. Sin filtros ni fechas es la pantalla Hoy.
 
-    filtros = [Evento.fecha_hecho >= desde, Evento.fecha_hecho <= hasta]
-    if tipo:
-        filtros.append(Evento.tipo.in_(tipo))
-    if estado:
-        filtros.append(Evento.estado.in_(estado))
+    Cuando hay texto, estado, área, responsable, seguimiento o vencidos y no se dan fechas, se busca en
+    todo el histórico: quien busca no suele saber cuándo ocurrió.
+    """
+    q = (q or "").strip() or None
+    busca_amplia = bool(q or estado or area_id or responsable_id or seguimiento or vencidos)
+
+    if q and es_folio(q):
+        filtros = [Evento.folio == q.upper()]  # un folio abre ese evento, sin otros filtros
+        q = None
+    else:
+        if desde is None and hasta is None and not busca_amplia:
+            desde = hasta = hoy_en_zona()  # la pantalla Hoy
+        if not busca_amplia:
+            desde = desde or hasta
+            hasta = hasta or desde
+        if desde and hasta and desde > hasta:
+            raise HTTPException(400, "'desde' no puede ser posterior a 'hasta'")
+        if desde and hasta and not busca_amplia and (hasta - desde).days > 366:
+            raise HTTPException(400, "El rango máximo es de 366 días")
+
+        filtros = []
+        if desde:
+            filtros.append(Evento.fecha_hecho >= desde)
+        if hasta:
+            filtros.append(Evento.fecha_hecho <= hasta)
+        if tipo:
+            filtros.append(Evento.tipo.in_(tipo))
+        if estado:
+            filtros.append(Evento.estado.in_(estado))
+        if area_id:
+            filtros.append(Evento.area_id == area_id)
+        if responsable_id:
+            filtros.append(Evento.responsable_id == responsable_id)
+        if seguimiento:
+            filtros.append(Evento.requiere_seguimiento == (seguimiento == "con"))
+        if vencidos:
+            filtros.append(Evento.id.in_(
+                select(Compromiso.evento_id).where(
+                    Compromiso.estado == EstadoCompromiso.pendiente, Compromiso.fecha_limite < hoy_en_zona()
+                )
+            ))
+        if q:
+            dialect = db.get_bind().dialect.name
+            filtros += condicion_busqueda(q, dialect_name=dialect)
 
     total = db.scalar(select(func.count()).select_from(Evento).where(*filtros))
     filas = (
@@ -148,8 +188,23 @@ def listar_eventos(
         .unique()
         .all()
     )
+
+    notas, comps = {}, {}
+    if q and filas:
+        ids = [e.id for e in filas]
+        for n in db.scalars(select(Seguimiento).where(Seguimiento.evento_id.in_(ids)).order_by(Seguimiento.creado_en)):
+            notas.setdefault(n.evento_id, []).append(n)
+        for c in db.scalars(select(Compromiso).where(Compromiso.evento_id.in_(ids))):
+            comps.setdefault(c.evento_id, []).append(c)
+
     return EventosPagina(
-        data=[a_salida(e) for e in filas],
+        data=[
+            EventoBusquedaOut(
+                **a_salida(e).model_dump(),
+                fragmento=fragmento(q, e, notas.get(e.id, []), comps.get(e.id, [])) if q else None,
+            )
+            for e in filas
+        ],
         meta=Meta(page=page, page_size=page_size, total=total),
     )
 
@@ -165,7 +220,9 @@ def buscar_evento(db: Session, folio: str) -> Evento:
         condicion = Evento.id == uuid.UUID(folio)
     except ValueError:
         condicion = Evento.folio == folio.upper()
-    e = db.scalars(_con_relaciones().where(condicion)).unique().one_or_none()
+    e = db.scalars(
+        _con_relaciones().where(condicion).execution_options(populate_existing=True)
+    ).unique().one_or_none()
     if e is None:
         raise HTTPException(404, "Evento no encontrado")
     return e
@@ -227,7 +284,7 @@ def _lista_compromisos(db: Session, e: Evento) -> list[CompromisoOut]:
 @router.get("/{folio}", response_model=EventoDetalleOut)
 def obtener_evento(
     folio: str,
-    incluir: list[str] = Query(default=[], description="seguimientos, compromisos (separados por coma o repetidos)"),
+    incluir: list[str] = Query(default=[], description="seguimientos, compromisos, auditoria (separados por coma o repetidos)"),
     db: Session = Depends(get_db),
     _: Usuario = Depends(usuario_actual),
 ):
@@ -238,10 +295,86 @@ def obtener_evento(
         salida.seguimientos = _lista_seguimientos(db, e)
     if "compromisos" in pedidos:
         salida.compromisos = _lista_compromisos(db, e)
+    if "auditoria" in pedidos:
+        filas = db.scalars(
+            select(Auditoria).options(joinedload(Auditoria.usuario))
+            .where(Auditoria.evento_id == e.id).order_by(Auditoria.creado_en, Auditoria.id)
+        ).all()
+        salida.auditoria = [AuditoriaOut.model_validate(a) for a in filas]
     return salida
 
 
 # ---------------------------------------------------------------- Sprint 2
+CAMPOS_CABECERA = ("tipo", "subtipo", "titulo", "descripcion", "referencia", "fecha_hecho", "area_id", "solicitante_nombre")
+OBLIGATORIOS = {"tipo", "titulo", "descripcion", "fecha_hecho"}  # un null explícito se ignora
+
+
+def _fecha_local(dt: datetime) -> date:
+    if dt.tzinfo is None:  # SQLite devuelve fechas sin zona; se guardan en UTC
+        dt = dt.replace(tzinfo=ZoneInfo("UTC"))
+    return dt.astimezone(ZoneInfo(settings.zona_horaria)).date()
+
+
+def _txt(v):
+    if v is None:
+        return None
+    return getattr(v, "value", None) or (v.isoformat() if hasattr(v, "isoformat") else str(v))
+
+
+def _corregir_cabecera(db: Session, e: Evento, datos: EventoPatch, usuario: Usuario) -> bool:
+    """CU-23. El autor corrige el mismo día; después, encargado o jefe. Cada cambio queda en auditoría."""
+    pedidos = {
+        c: getattr(datos, c)
+        for c in CAMPOS_CABECERA
+        if c in datos.model_fields_set and not (getattr(datos, c) is None and c in OBLIGATORIOS)
+    }
+    for c in ("referencia", "solicitante_nombre", "subtipo"):
+        if c in pedidos and isinstance(pedidos[c], str):
+            pedidos[c] = pedidos[c].strip() or None
+    if not pedidos:
+        return False
+
+    es_autor_mismo_dia = (
+        usuario.id == e.autor_id
+        and _fecha_local(e.creado_en) == hoy_en_zona()
+        and e.estado not in (Estado.cerrado, Estado.cancelado)
+    )
+    if not (es_gestor(usuario.rol) or es_autor_mismo_dia):
+        raise conflicto("sin_permiso", "El autor corrige el mismo día; después, solo el encargado o el jefe")
+
+    nuevo_tipo = pedidos.get("tipo", e.tipo)
+    nuevo_subtipo = pedidos["subtipo"] if "subtipo" in pedidos else e.subtipo
+    if nuevo_subtipo and nuevo_subtipo not in SUBTIPOS[nuevo_tipo]:
+        raise HTTPException(400, f"El subtipo '{nuevo_subtipo}' no es válido para {nuevo_tipo.value}")
+    if pedidos.get("fecha_hecho") and pedidos["fecha_hecho"] > hoy_en_zona():
+        raise HTTPException(400, "La fecha del hecho no puede estar en el futuro")
+    area_nueva = None
+    if pedidos.get("area_id"):
+        area_nueva = db.get(Area, pedidos["area_id"])
+        if not area_nueva:
+            raise HTTPException(400, "El área no existe")
+
+    hubo = False
+    for campo, nuevo in pedidos.items():
+        if campo in ("titulo", "descripcion") and isinstance(nuevo, str):
+            nuevo = nuevo.strip()
+        if campo == "area_id":
+            antes = e.area.nombre if e.area else None
+            despues = area_nueva.nombre if area_nueva else None
+            if e.area_id == nuevo:
+                continue
+            etiqueta = "area"
+        else:
+            antes, despues, etiqueta = _txt(getattr(e, campo)), _txt(nuevo), campo
+            if getattr(e, campo) == nuevo:
+                continue
+        setattr(e, campo, nuevo)
+        db.add(Auditoria(evento_id=e.id, campo=etiqueta, valor_anterior=antes, valor_nuevo=despues,
+                         usuario_id=usuario.id, creado_en=_ahora()))
+        hubo = True
+    return hubo
+
+
 @router.patch("/{folio}", response_model=EventoOut)
 def modificar_evento(
     folio: str,
@@ -249,52 +382,60 @@ def modificar_evento(
     db: Session = Depends(get_db),
     usuario: Usuario = Depends(usuario_actual),
 ):
-    """CU-04 (activar/quitar seguimiento) y CU-05 (responsable y prioridad)."""
+    """CU-04 (seguimiento), CU-05 (responsable y prioridad) y CU-23 (corregir cabecera)."""
     e = buscar_evento(db, folio)
-    if e.estado in (Estado.cerrado, Estado.cancelado):
-        raise conflicto("evento_cerrado", "El evento está cerrado o cancelado")
+    toca_cabecera = any(c in datos.model_fields_set for c in CAMPOS_CABECERA)
+    toca_seguimiento = (
+        datos.requiere_seguimiento is not None or datos.responsable_id is not None or datos.prioridad is not None
+    )
 
-    if datos.responsable_id is not None and not db.get(Usuario, datos.responsable_id):
-        raise HTTPException(400, "El responsable no existe")
+    if toca_cabecera:
+        _corregir_cabecera(db, e, datos, usuario)
 
-    anterior = e.estado
-    if datos.requiere_seguimiento is True and not e.requiere_seguimiento:
-        # CU-04: activar. Cualquier miembro del equipo.
-        e.requiere_seguimiento = True
-        e.estado = Estado.abierto
-        e.responsable_id = datos.responsable_id or e.responsable_id or usuario.id
-        e.prioridad = datos.prioridad or e.prioridad or Prioridad.media
-        _nota(db, e, usuario, datos.nota or "Se activó el seguimiento.", anterior, Estado.abierto)
-    elif datos.requiere_seguimiento is False and e.requiere_seguimiento:
-        # CU-04: quitar. Solo encargado/jefe y sin compromisos pendientes.
-        if not es_gestor(usuario.rol):
-            raise conflicto("sin_permiso", "Solo el encargado o el jefe pueden quitar el seguimiento")
-        if _pendientes_del_evento(db, e):
-            raise conflicto("compromisos_pendientes", "Hay compromisos pendientes en este evento")
-        e.requiere_seguimiento = False
-        e.estado = Estado.informativo
-        e.responsable_id = None
-        e.prioridad = None
-        _nota(db, e, usuario, datos.nota or "Se quitó el seguimiento.", anterior, Estado.informativo)
+    if toca_seguimiento:
+        if e.estado in (Estado.cerrado, Estado.cancelado):
+            raise conflicto("evento_cerrado", "El evento está cerrado o cancelado")
+        if datos.responsable_id is not None and not db.get(Usuario, datos.responsable_id):
+            raise HTTPException(400, "El responsable no existe")
 
-    if datos.responsable_id is not None or datos.prioridad is not None:
-        # CU-05: asignar responsable y prioridad. Encargado/jefe.
-        if not es_gestor(usuario.rol) and not (datos.requiere_seguimiento is True and anterior == Estado.informativo):
-            raise conflicto("sin_permiso", "Solo el encargado o el jefe asignan responsable y prioridad")
-        if not e.requiere_seguimiento:
-            raise conflicto("sin_seguimiento", "El evento no tiene seguimiento activo")
-        cambios = []
-        if datos.responsable_id is not None and datos.responsable_id != e.responsable_id:
-            e.responsable_id = datos.responsable_id
-            cambios.append("responsable")
-        if datos.prioridad is not None and datos.prioridad != e.prioridad:
-            e.prioridad = datos.prioridad
-            cambios.append(f"prioridad {datos.prioridad.value}")
-        if cambios:
-            _nota(db, e, usuario, datos.nota or "Se cambió: " + ", ".join(cambios) + ".")
+        anterior = e.estado
+        if datos.requiere_seguimiento is True and not e.requiere_seguimiento:
+            # CU-04: activar. Cualquier miembro del equipo.
+            e.requiere_seguimiento = True
+            e.estado = Estado.abierto
+            e.responsable_id = datos.responsable_id or e.responsable_id or usuario.id
+            e.prioridad = datos.prioridad or e.prioridad or Prioridad.media
+            _nota(db, e, usuario, datos.nota or "Se activó el seguimiento.", anterior, Estado.abierto)
+        elif datos.requiere_seguimiento is False and e.requiere_seguimiento:
+            # CU-04: quitar. Solo encargado/jefe y sin compromisos pendientes.
+            if not es_gestor(usuario.rol):
+                raise conflicto("sin_permiso", "Solo el encargado o el jefe pueden quitar el seguimiento")
+            if _pendientes_del_evento(db, e):
+                raise conflicto("compromisos_pendientes", "Hay compromisos pendientes en este evento")
+            e.requiere_seguimiento = False
+            e.estado = Estado.informativo
+            e.responsable_id = None
+            e.prioridad = None
+            _nota(db, e, usuario, datos.nota or "Se quitó el seguimiento.", anterior, Estado.informativo)
 
+        if datos.responsable_id is not None or datos.prioridad is not None:
+            # CU-05: asignar responsable y prioridad. Encargado/jefe (o quien activa el seguimiento).
+            if not es_gestor(usuario.rol) and not (datos.requiere_seguimiento is True and anterior == Estado.informativo):
+                raise conflicto("sin_permiso", "Solo el encargado o el jefe asignan responsable y prioridad")
+            if not e.requiere_seguimiento:
+                raise conflicto("sin_seguimiento", "El evento no tiene seguimiento activo")
+            cambios = []
+            if datos.responsable_id is not None and datos.responsable_id != e.responsable_id:
+                e.responsable_id = datos.responsable_id
+                cambios.append("responsable")
+            if datos.prioridad is not None and datos.prioridad != e.prioridad:
+                e.prioridad = datos.prioridad
+                cambios.append(f"prioridad {datos.prioridad.value}")
+            if cambios:
+                _nota(db, e, usuario, datos.nota or "Se cambió: " + ", ".join(cambios) + ".")
+
+    reindexar(db, e)
     db.commit()
-    db.expire_all()
     return a_salida(buscar_evento(db, e.folio))
 
 
@@ -347,8 +488,8 @@ def cambiar_estado(
     _nota(db, e, usuario, f"Estado: {desde.value} → {hacia.value}.", desde, hacia)  # automática
     if nota:
         _nota(db, e, usuario, nota)
+    reindexar(db, e)
     db.commit()
-    db.expire_all()
     return a_salida(buscar_evento(db, e.folio))
 
 
@@ -371,6 +512,7 @@ def agregar_nota(
     if e.estado == Estado.cerrado and not es_gestor(usuario.rol):
         raise conflicto("sin_permiso", "En un evento cerrado solo el encargado o el jefe agregan notas")
     n = _nota(db, e, usuario, datos.nota.strip())
+    reindexar(db, e)
     db.commit()
     return SeguimientoOut.model_validate(n)
 
@@ -408,6 +550,7 @@ def crear_compromiso(
     )
     db.add(c)
     _nota(db, e, usuario, f"Compromiso registrado para el {datos.fecha_limite.isoformat()}: {c.descripcion}")
+    reindexar(db, e)
     db.commit()
     c = db.scalars(select(Compromiso).options(joinedload(Compromiso.responsable)).where(Compromiso.id == c.id)).one()
     return compromiso_a_salida(c, e.folio)

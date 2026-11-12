@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+export PYTHONPATH="${PYTHONPATH:-.}"
 # Aplica las migraciones antes de arrancar la API.
 alembic upgrade head
 # Datos iniciales (jefe y áreas) solo si se definen en el entorno. Es idempotente.

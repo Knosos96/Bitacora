@@ -6,7 +6,7 @@ import tkinter as tk
 from datetime import date
 from tkinter import messagebox, simpledialog, ttk
 
-from app.enums import SUBTIPOS, Tipo
+from app.enums import SUBTIPOS, Estado, Tipo
 from desktop.api_client import ClienteApi, ErrorApi
 
 TIPOS = [t.value for t in Tipo]
@@ -78,8 +78,15 @@ class Principal(tk.Tk):
         ttk.Button(f, text="Buscar", command=self.recargar).pack(side="left", padx=6)
         ttk.Button(f, text="Hoy", command=self.ir_a_hoy).pack(side="left")
         ttk.Button(f, text="Pendientes", command=lambda: Pendientes(self, self.c)).pack(side="left", padx=6)
+        ttk.Button(f, text="Búsqueda…", command=lambda: Busqueda(self, self.c)).pack(side="left")
+        if self.c.usuario["rol"] in ("encargado", "jefe"):
+            ttk.Button(f, text="Tablero", command=lambda: Tablero(self, self.c)).pack(side="left", padx=6)
         self.total = ttk.Label(f, text="")
         self.total.pack(side="right")
+        # Aviso de compromisos vencidos: visible en la pantalla de inicio, clic para verlos.
+        self.aviso = tk.Label(self, text="", fg="#b00020", cursor="hand2", anchor="w", padx=12)
+        self.aviso.pack(fill="x")
+        self.aviso.bind("<Button-1>", lambda _e: Pendientes(self, self.c, solo_vencidos=True))
 
     def ir_a_hoy(self):
         hoy = date.today().isoformat()
@@ -115,6 +122,14 @@ class Principal(tk.Tk):
                 e["folio"], e["fecha_hecho"], e["tipo"], e["titulo"], e["estado"],
                 (e["responsable"] or {}).get("nombre", "—")))
         self.total.config(text=f"{r['meta']['total']} evento(s)")
+        self._actualizar_aviso()
+
+    def _actualizar_aviso(self):
+        try:
+            n = len(self.c.pendientes(solo_vencidos=True)["compromisos"])
+        except ErrorApi:
+            n = 0
+        self.aviso.config(text=f"⚠ {n} compromiso(s) vencido(s) — clic para verlos" if n else "")
 
     def ver_detalle(self, _evento):
         sel = self.tabla.selection()
@@ -221,6 +236,8 @@ class Detalle(tk.Toplevel):
         ttk.Button(barra, text="Cambiar estado", command=self.cambiar_estado).pack(side="left", padx=4)
         self.btn_seg = ttk.Button(barra, text="Activar seguimiento", command=self.alternar_seguimiento)
         self.btn_seg.pack(side="right")
+        ttk.Button(barra, text="Corregir datos", command=self.corregir).pack(side="right", padx=4)
+        ttk.Button(barra, text="Auditoría", command=self.ver_auditoria).pack(side="right")
 
         ttk.Label(self, text="Historial de notas", padding=(10, 4)).pack(anchor="w")
         self.notas = tk.Text(self, wrap="word", height=10, padx=10, state="disabled")
@@ -259,7 +276,7 @@ class Detalle(tk.Toplevel):
 
     def cargar(self):
         try:
-            self.e = self.c.evento_completo(self.folio)
+            self.e = self.c.evento_con_auditoria(self.folio)
         except ErrorApi as ex:
             self._error(ex)
             return
@@ -293,6 +310,19 @@ class Detalle(tk.Toplevel):
         for c in e["compromisos"]:
             est = "VENCIDO" if c["vencido"] else c["estado"]
             self.tabla.insert("", "end", iid=c["id"], values=(c["fecha_limite"], c["descripcion"], c["responsable"]["nombre"], est))
+
+    def corregir(self):
+        Corregir(self, self.c, self.e, al_guardar=self._avisar)
+
+    def ver_auditoria(self):
+        filas = self.e.get("auditoria") or []
+        if not filas:
+            messagebox.showinfo("Auditoría", "Este evento no tiene correcciones.", parent=self)
+            return
+        texto = "\n".join(
+            f"[{a['creado_en'][:16].replace('T', ' ')}] {a['usuario']['nombre']}: {a['campo']}  "
+            f"«{a['valor_anterior'] or '—'}» → «{a['valor_nuevo'] or '—'}»" for a in filas)
+        messagebox.showinfo("Auditoría", texto, parent=self)
 
     def cambiar_estado(self):
         if not self.sig.get():
@@ -362,14 +392,14 @@ class Detalle(tk.Toplevel):
 class Pendientes(tk.Toplevel):
     """CU-15: eventos con seguimiento sin cerrar y compromisos abiertos."""
 
-    def __init__(self, padre, cliente: ClienteApi):
+    def __init__(self, padre, cliente: ClienteApi, solo_vencidos: bool = False):
         super().__init__(padre)
         self.c = cliente
         self.title("Pendientes")
         self.geometry("900x520")
         barra = ttk.Frame(self, padding=8)
         barra.pack(fill="x")
-        self.venc = tk.BooleanVar()
+        self.venc = tk.BooleanVar(value=solo_vencidos)
         ttk.Checkbutton(barra, text="Solo vencidos", variable=self.venc, command=self.cargar).pack(side="left")
         ttk.Button(barra, text="Actualizar", command=self.cargar).pack(side="left", padx=8)
 
@@ -407,6 +437,234 @@ class Pendientes(tk.Toplevel):
         self.t_co.delete(*self.t_co.get_children())
         for c in r["compromisos"]:
             self.t_co.insert("", "end", values=(c["fecha_limite"], c["evento_folio"], c["descripcion"], c["responsable"]["nombre"], "VENCIDO" if c["vencido"] else ""))
+
+
+class Corregir(tk.Toplevel):
+    """CU-23: corrige título, descripción, referencia, solicitante, fecha y subtipo. Queda en auditoría."""
+
+    CAMPOS = [("titulo", "Título"), ("descripcion", "Descripción"), ("referencia", "Referencia"),
+              ("solicitante_nombre", "Solicitante"), ("fecha_hecho", "Fecha del hecho (AAAA-MM-DD)"),
+              ("subtipo", "Subtipo")]
+
+    def __init__(self, padre, cliente: ClienteApi, evento: dict, al_guardar=None):
+        super().__init__(padre)
+        self.c, self.ev, self.al_guardar = cliente, evento, al_guardar
+        self.title(f"Corregir {evento['folio']}")
+        self.vars: dict[str, tk.StringVar] = {}
+        actual = {"solicitante_nombre": evento.get("solicitante")}
+        for i, (k, etiqueta) in enumerate(self.CAMPOS):
+            ttk.Label(self, text=etiqueta).grid(row=i, column=0, sticky="w", padx=10, pady=4)
+            v = tk.StringVar(value=str(actual.get(k, evento.get(k)) or ""))
+            self.vars[k] = v
+            ttk.Entry(self, textvariable=v, width=60).grid(row=i, column=1, padx=10, pady=4)
+        ttk.Label(self, text="El autor corrige el mismo día; después, encargado o jefe.").grid(
+            row=len(self.CAMPOS), column=0, columnspan=2, pady=4)
+        ttk.Button(self, text="Guardar", command=self.guardar).grid(row=len(self.CAMPOS) + 1, column=1, sticky="e", padx=10, pady=8)
+
+    def guardar(self):
+        antes = {"solicitante_nombre": self.ev.get("solicitante")}
+        cambios = {}
+        for k, v in self.vars.items():
+            nuevo = v.get().strip()
+            previo = str(antes.get(k, self.ev.get(k)) or "")
+            if nuevo != previo:
+                cambios[k] = nuevo or None
+        if not cambios:
+            self.destroy()
+            return
+        try:
+            self.c.corregir_evento(self.ev["folio"], cambios)
+        except ErrorApi as ex:
+            messagebox.showerror("No se pudo", str(ex), parent=self)
+            return
+        if self.al_guardar:
+            self.al_guardar()
+        self.destroy()
+
+
+ESTADOS = [e.value for e in Estado]
+
+
+class Busqueda(tk.Toplevel):
+    """CU-11 y CU-12: texto libre (sin acentos, en cualquier campo) más filtros."""
+
+    def __init__(self, padre, cliente: ClienteApi):
+        super().__init__(padre)
+        self.c = cliente
+        self.title("Búsqueda")
+        self.geometry("1000x560")
+        f = ttk.Frame(self, padding=8)
+        f.pack(fill="x")
+        self.q = tk.StringVar()
+        e = ttk.Entry(f, textvariable=self.q, width=34)
+        e.pack(side="left")
+        e.bind("<Return>", lambda _e: self.buscar())
+        e.focus_set()
+        self.tipo, self.estado = tk.StringVar(value="todos"), tk.StringVar(value="todos")
+        self.seg = tk.StringVar(value="todos")
+        self.venc = tk.BooleanVar()
+        for var, valores, ancho in ((self.tipo, ["todos"] + TIPOS, 10), (self.estado, ["todos"] + ESTADOS, 11),
+                                    (self.seg, ["todos", "con", "sin"], 7)):
+            ttk.Combobox(f, textvariable=var, values=valores, width=ancho, state="readonly").pack(side="left", padx=3)
+        ttk.Checkbutton(f, text="Vencidos", variable=self.venc).pack(side="left", padx=4)
+        ttk.Button(f, text="Buscar", command=self.buscar).pack(side="left", padx=4)
+
+        f2 = ttk.Frame(self, padding=(8, 0))
+        f2.pack(fill="x")
+        self.desde, self.hasta = tk.StringVar(), tk.StringVar()
+        ttk.Label(f2, text="Desde (opcional)").pack(side="left")
+        ttk.Entry(f2, textvariable=self.desde, width=11).pack(side="left", padx=4)
+        ttk.Label(f2, text="Hasta").pack(side="left")
+        ttk.Entry(f2, textvariable=self.hasta, width=11).pack(side="left", padx=4)
+        ttk.Label(f2, text="Sin fechas se busca en todo el histórico. Un folio abre ese evento.").pack(side="left", padx=10)
+        self.total = ttk.Label(f2, text="")
+        self.total.pack(side="right")
+
+        cols = (("folio", "Folio", 105), ("fecha", "Fecha", 85), ("tipo", "Tipo", 80), ("titulo", "Título", 250),
+                ("estado", "Estado", 85), ("frag", "Coincidencia", 360))
+        self.tabla = ttk.Treeview(self, columns=[c[0] for c in cols], show="headings")
+        for k, t, a in cols:
+            self.tabla.heading(k, text=t)
+            self.tabla.column(k, width=a, anchor="w")
+        self.tabla.pack(fill="both", expand=True, padx=8, pady=8)
+        self.tabla.bind("<Double-1>", self._abrir)
+
+    def _abrir(self, _e):
+        sel = self.tabla.selection()
+        if sel:
+            Detalle(self, self.c, sel[0], al_cambiar=self.buscar)
+
+    def buscar(self):
+        pick = lambda v: None if v.get() == "todos" else v.get()  # noqa: E731
+        try:
+            r = self.c.buscar(q=self.q.get().strip(), desde=self.desde.get().strip(), hasta=self.hasta.get().strip(),
+                              tipo=pick(self.tipo), estado=pick(self.estado), seguimiento=pick(self.seg),
+                              vencidos=True if self.venc.get() else None, page_size=200)
+        except ErrorApi as ex:
+            messagebox.showerror("Error", str(ex), parent=self)
+            return
+        self.tabla.delete(*self.tabla.get_children())
+        for e in r["data"]:
+            self.tabla.insert("", "end", iid=e["folio"], values=(
+                e["folio"], e["fecha_hecho"], e["tipo"], e["titulo"], e["estado"], e.get("fragmento") or ""))
+        n = r["meta"]["total"]
+        self.total.config(text=f"{n} resultado(s)" + (" — mostrando 200" if n > 200 else ""))
+
+
+class Tablero(tk.Toplevel):
+    """CU-14: K1 a K12. Doble clic en un indicador abre la lista que lo explica."""
+
+    def __init__(self, padre, cliente: ClienteApi):
+        super().__init__(padre)
+        self.c = cliente
+        self.title("Tablero")
+        self.geometry("780x520")
+        f = ttk.Frame(self, padding=8)
+        f.pack(fill="x")
+        self.desde, self.hasta = tk.StringVar(), tk.StringVar()
+        ttk.Label(f, text="Desde").pack(side="left")
+        ttk.Entry(f, textvariable=self.desde, width=11).pack(side="left", padx=4)
+        ttk.Label(f, text="Hasta").pack(side="left")
+        ttk.Entry(f, textvariable=self.hasta, width=11).pack(side="left", padx=4)
+        ttk.Button(f, text="Esta semana", command=self.cargar_semana).pack(side="left", padx=4)
+        ttk.Button(f, text="Hoy", command=self.cargar_hoy).pack(side="left")
+        ttk.Button(f, text="Este mes", command=self.cargar_mes).pack(side="left", padx=4)
+        ttk.Button(f, text="Aplicar rango", command=self.cargar).pack(side="left")
+        self.info = ttk.Label(f, text="")
+        self.info.pack(side="right")
+        self.tabla = ttk.Treeview(self, columns=("id", "nombre", "valor", "detalle"), show="headings")
+        for k, t, a in (("id", "", 45), ("nombre", "Indicador", 230), ("valor", "Valor", 130), ("detalle", "Detalle", 330)):
+            self.tabla.heading(k, text=t)
+            self.tabla.column(k, width=a, anchor="w")
+        self.tabla.pack(fill="both", expand=True, padx=8, pady=8)
+        self.tabla.bind("<Double-1>", self._abrir)
+        ttk.Label(self, text="Todos los indicadores K1 a K12 dependen del rango seleccionado.").pack(pady=(0, 6))
+        self.cargar()
+
+    def cargar_semana(self):
+        self.desde.set(""), self.hasta.set("")
+        self.cargar()
+
+    def cargar_hoy(self):
+        self.desde.set(date.today().isoformat()), self.hasta.set(date.today().isoformat())
+        self.cargar()
+
+    def cargar_mes(self):
+        hoy = date.today()
+        self.desde.set(hoy.replace(day=1).isoformat()), self.hasta.set(hoy.isoformat())
+        self.cargar()
+
+    @staticmethod
+    def _detalle(i: dict) -> str:
+        d = i.get("detalle") or {}
+        if i["id"] == "K1":
+            return ", ".join(f"{t} {n}" for t, n in d["por_tipo"].items())
+        if i["id"] == "K2":
+            return f"con seguimiento {d['con_seguimiento']} · informativos {d['informativos']}"
+        if i["id"] == "K5":
+            return f"{d['cerrados']} cerrados · " + ", ".join(f"{t} {h} h" for t, h in d["por_tipo"].items())
+        if i["id"] == "K7":
+            return f"{d['cumplidos_a_tiempo']} de {d['total']} a tiempo"
+        if i["id"] == "K9":
+            return ", ".join(f"{p['nombre']} {p['abiertos']}" for p in d["por_responsable"])
+        if i["id"] == "K10":
+            return ", ".join(f"{a['nombre']} {a['total']}" for a in d["top"])
+        if i["id"] == "K11" and d:
+            return f"{d['folio']} — {d['titulo']}"
+        return ""
+
+    def cargar(self):
+        try:
+            r = self.c.tablero(self.desde.get().strip() or None, self.hasta.get().strip() or None)
+        except ErrorApi as ex:
+            messagebox.showerror("Error", str(ex), parent=self)
+            return
+        self.rango = (r["desde"], r["hasta"])
+        self.info.config(text=f"Rango {r['desde']} a {r['hasta']}")
+        self.tabla.delete(*self.tabla.get_children())
+        for i in r["indicadores"]:
+            valor = "sin datos" if i["valor"] is None else f"{i['valor']} {i.get('unidad') or ''}".strip()
+            self.tabla.insert("", "end", iid=i["id"], values=(i["id"], i["nombre"], valor, self._detalle(i)))
+
+    def _abrir(self, _e):
+        sel = self.tabla.selection()
+        if sel:
+            ListaKpi(self, self.c, sel[0], *self.rango)
+
+
+class ListaKpi(tk.Toplevel):
+    def __init__(self, padre, cliente: ClienteApi, kid: str, desde: str, hasta: str):
+        super().__init__(padre)
+        self.c = cliente
+        try:
+            r = cliente.lista_kpi(kid, desde, hasta)
+        except ErrorApi as ex:
+            messagebox.showerror("Error", str(ex), parent=padre)
+            self.destroy()
+            return
+        self.title(f"{kid} — {r['nombre']}")
+        self.geometry("860x420")
+        if not r["eventos"] and not r["compromisos"]:
+            ttk.Label(self, text=r.get("texto_vacio") or "Sin resultados", padding=20).pack()
+            return
+        cols = ("folio", "titulo", "estado", "extra")
+        t = ttk.Treeview(self, columns=cols, show="headings")
+        for k, h, a in (("folio", "Folio", 110), ("titulo", "Título / compromiso", 430), ("estado", "Estado", 100), ("extra", "", 190)):
+            t.heading(k, text=h)
+            t.column(k, width=a, anchor="w")
+        for e in r["eventos"]:
+            t.insert("", "end", iid=e["folio"], values=(e["folio"], e["titulo"], e["estado"], e["fecha_hecho"]))
+        for c in r["compromisos"]:
+            t.insert("", "end", values=(c["evento_folio"], c["descripcion"],
+                                        "VENCIDO" if c["vencido"] else c["estado"],
+                                        f"{c['fecha_limite']} · {c['responsable']['nombre']}"))
+        t.pack(fill="both", expand=True, padx=8, pady=8)
+        t.bind("<Double-1>", lambda _e: self._abrir(t))
+
+    def _abrir(self, t):
+        sel = t.selection()
+        if sel:
+            Detalle(self, self.c, t.item(sel[0])["values"][0])
 
 
 def main():

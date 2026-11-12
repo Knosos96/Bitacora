@@ -2,10 +2,24 @@ import uuid
 from datetime import date, datetime, timezone
 
 from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, Uuid, event
+from sqlalchemy.dialects.postgresql import TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from app.db import Base
 from app.enums import Estado, EstadoCompromiso, Prioridad, Rol, Tipo
+
+
+class TSVector(TypeDecorator):
+    """Tipo TSVECTOR para PostgreSQL con fallback a Text en SQLite (pruebas)."""
+
+    impl = Text
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(TSVECTOR())
+        return dialect.type_descriptor(Text())
 
 
 def _enum(e, nombre):
@@ -52,6 +66,7 @@ class Evento(Base):
         Index("ix_evento_fecha_tipo", "fecha_hecho", "tipo"),
         Index("ix_evento_estado", "estado"),
         Index("ix_evento_responsable", "responsable_id"),
+        Index("ix_evento_busqueda", "busqueda", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
@@ -71,6 +86,9 @@ class Evento(Base):
     responsable_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("usuario.id"))
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
     cerrado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Vector de texto completo PostgreSQL tsvector (con fallback a texto en SQLite para pruebas).
+    # Reúne título, descripción, solicitante, referencia, notas y compromisos. Acelerado con índice GIN.
+    busqueda: Mapped[str | None] = mapped_column(TSVector, nullable=True)
 
     area: Mapped[Area | None] = relationship()
     autor: Mapped[Usuario] = relationship(foreign_keys=[autor_id])
@@ -114,6 +132,23 @@ class Compromiso(Base):
 
     evento: Mapped[Evento] = relationship(foreign_keys=[evento_id])
     responsable: Mapped[Usuario] = relationship(foreign_keys=[responsable_id])
+
+
+class Auditoria(Base):
+    """Correcciones de la cabecera del evento: campo, valor anterior, valor nuevo, usuario y fecha."""
+
+    __tablename__ = "auditoria"
+    __table_args__ = (Index("ix_auditoria_evento", "evento_id", "creado_en"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    evento_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("evento.id"))
+    campo: Mapped[str] = mapped_column(String(40))
+    valor_anterior: Mapped[str | None] = mapped_column(Text)
+    valor_nuevo: Mapped[str | None] = mapped_column(Text)
+    usuario_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("usuario.id"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+    usuario: Mapped[Usuario] = relationship(foreign_keys=[usuario_id])
 
 
 @event.listens_for(Seguimiento, "before_update")

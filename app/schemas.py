@@ -105,8 +105,14 @@ class Meta(BaseModel):
     total: int
 
 
+class EventoBusquedaOut(EventoOut):
+    """EventoOut más el trozo de texto donde apareció la búsqueda (solo si se envió q)."""
+
+    fragmento: str | None = None
+
+
 class EventosPagina(BaseModel):
-    data: list[EventoOut]
+    data: list[EventoBusquedaOut]
     meta: Meta
 
 
@@ -121,6 +127,15 @@ class EventoPatch(BaseModel):
     responsable_id: uuid.UUID | None = None
     prioridad: Prioridad | None = None
     nota: str | None = Field(default=None, max_length=5000)
+    # CU-23: corrección de cabecera (queda en auditoría)
+    tipo: Tipo | None = None
+    subtipo: str | None = None
+    titulo: str | None = Field(default=None, min_length=1, max_length=200)
+    descripcion: str | None = Field(default=None, min_length=1)
+    referencia: str | None = None
+    fecha_hecho: date | None = None
+    area_id: uuid.UUID | None = None
+    solicitante_nombre: str | None = None
 
 
 class CambioEstadoIn(BaseModel):
@@ -171,12 +186,46 @@ class CompromisoPendienteOut(CompromisoOut):
     evento_tipo: Tipo
 
 
+class AuditoriaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    campo: str
+    valor_anterior: str | None
+    valor_nuevo: str | None
+    usuario: UsuarioRef
+    creado_en: datetime
+
+
 class EventoDetalleOut(EventoOut):
-    # Solo se llenan si se pide ?incluir=seguimientos,compromisos
+    # Solo se llenan si se pide ?incluir=seguimientos,compromisos,auditoria
     seguimientos: list[SeguimientoOut] | None = None
     compromisos: list[CompromisoOut] | None = None
+    auditoria: list[AuditoriaOut] | None = None
 
 
 class PendientesOut(BaseModel):
+    eventos: list[EventoOut]
+    compromisos: list[CompromisoPendienteOut]
+
+
+# ---------------------------------------------------------------- Sprint 4
+class Indicador(BaseModel):
+    id: str  # K1 ... K12
+    nombre: str
+    valor: float | int | None  # None cuando no hay datos para calcularlo (p. ej. K5 sin cerrados)
+    unidad: str | None = None
+    detalle: dict = {}
+
+
+class TableroOut(BaseModel):
+    desde: date
+    hasta: date
+    generado_en: datetime
+    indicadores: list[Indicador]
+
+
+class KpiListaOut(BaseModel):
+    id: str
+    nombre: str
+    texto_vacio: str | None  # se muestra si la lista viene vacía (K8: "No hay compromisos vencidos")
     eventos: list[EventoOut]
     compromisos: list[CompromisoPendienteOut]
