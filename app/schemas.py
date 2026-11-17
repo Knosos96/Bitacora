@@ -1,0 +1,271 @@
+import uuid
+from datetime import date, datetime
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
+
+from app.enums import Estado, Prioridad, Rol, Tipo
+
+
+class LoginIn(BaseModel):
+    correo: EmailStr
+    clave: str
+
+
+class UsuarioIn(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+    correo: EmailStr
+    clave: str = Field(min_length=8)
+    rol: Rol
+
+
+class UsuarioOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nombre: str
+    correo: str
+    rol: Rol
+    activo: bool
+
+
+class TokenOut(BaseModel):
+    token: str
+    tipo: str = "bearer"
+    usuario: UsuarioOut
+
+
+class UsuarioRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nombre: str
+
+
+class AreaIn(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+
+
+class AreaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nombre: str
+    activa: bool
+
+
+class AreaRef(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nombre: str
+
+
+class EventoIn(BaseModel):
+    tipo: Tipo
+    subtipo: str | None = None
+    titulo: str = Field(min_length=1, max_length=200)
+    descripcion: str = Field(min_length=1)
+    referencia: str | None = None
+    fecha_hecho: date | None = None  # si falta: hoy en la zona del área
+    area_id: uuid.UUID | None = None
+    solicitante_nombre: str | None = None
+    requiere_seguimiento: bool = False
+    prioridad: Prioridad | None = None
+    responsable_id: uuid.UUID | None = None
+
+
+class EventoOut(BaseModel):
+    """Contrato de la sección 10.1. No renombrar campos."""
+
+    id: uuid.UUID
+    folio: str
+    tipo: Tipo
+    subtipo: str | None
+    titulo: str
+    descripcion: str
+    referencia: str | None
+    fecha_hecho: date
+    estado: Estado
+    requiere_seguimiento: bool
+    prioridad: Prioridad | None
+    area_origen: AreaRef | None
+    solicitante: str | None
+    autor: UsuarioRef
+    responsable: UsuarioRef | None
+    creado_en: datetime
+    cerrado_en: datetime | None
+
+
+class Meta(BaseModel):
+    page: int
+    page_size: int
+    total: int
+
+
+class EventoBusquedaOut(EventoOut):
+    """EventoOut más el trozo de texto donde apareció la búsqueda (solo si se envió q)."""
+
+    fragmento: str | None = None
+
+
+class EventosPagina(BaseModel):
+    data: list[EventoBusquedaOut]
+    meta: Meta
+
+
+# ---------------------------------------------------------------- Sprint 2
+from app.enums import EstadoCompromiso  # noqa: E402
+
+
+class EventoPatch(BaseModel):
+    """CU-04 y CU-05: activar/quitar seguimiento, responsable y prioridad."""
+
+    requiere_seguimiento: bool | None = None
+    responsable_id: uuid.UUID | None = None
+    prioridad: Prioridad | None = None
+    nota: str | None = Field(default=None, max_length=5000)
+    # CU-23: corrección de cabecera (queda en auditoría)
+    tipo: Tipo | None = None
+    subtipo: str | None = None
+    titulo: str | None = Field(default=None, min_length=1, max_length=200)
+    descripcion: str | None = Field(default=None, min_length=1)
+    referencia: str | None = None
+    fecha_hecho: date | None = None
+    area_id: uuid.UUID | None = None
+    solicitante_nombre: str | None = None
+
+
+class CambioEstadoIn(BaseModel):
+    estado: Estado
+    nota: str | None = Field(default=None, max_length=5000)
+    # Al cerrar con compromisos pendientes: "cumplir" o "cancelar". Sin esto, el cierre se rechaza.
+    resolver_compromisos: str | None = Field(default=None, pattern="^(cumplir|cancelar)$")
+
+
+class SeguimientoIn(BaseModel):
+    nota: str = Field(min_length=1, max_length=5000)
+
+
+class SeguimientoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    autor: UsuarioRef
+    nota: str
+    estado_anterior: Estado | None
+    estado_nuevo: Estado | None
+    creado_en: datetime
+
+
+class CompromisoIn(BaseModel):
+    descripcion: str = Field(min_length=1, max_length=2000)
+    fecha_limite: date
+    responsable_id: uuid.UUID | None = None  # por defecto, quien lo registra
+
+
+class CompromisoPatch(BaseModel):
+    estado: EstadoCompromiso
+
+
+class CompromisoOut(BaseModel):
+    id: uuid.UUID
+    evento_folio: str
+    descripcion: str
+    responsable: UsuarioRef
+    fecha_limite: date
+    estado: EstadoCompromiso
+    vencido: bool  # calculado: pendiente y con fecha límite anterior a hoy
+    cumplido_en: datetime | None
+    creado_en: datetime
+
+
+class CompromisoPendienteOut(CompromisoOut):
+    evento_titulo: str
+    evento_tipo: Tipo
+
+
+class AuditoriaOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    campo: str
+    valor_anterior: str | None
+    valor_nuevo: str | None
+    usuario: UsuarioRef
+    creado_en: datetime
+
+
+class EventoDetalleOut(EventoOut):
+    # Solo se llenan si se pide ?incluir=seguimientos,compromisos,auditoria
+    seguimientos: list[SeguimientoOut] | None = None
+    compromisos: list[CompromisoOut] | None = None
+    auditoria: list[AuditoriaOut] | None = None
+
+
+class PendientesOut(BaseModel):
+    eventos: list[EventoOut]
+    compromisos: list[CompromisoPendienteOut]
+
+
+# ---------------------------------------------------------------- Sprint 4
+class Indicador(BaseModel):
+    id: str  # K1 ... K12
+    nombre: str
+    valor: float | int | None  # None cuando no hay datos para calcularlo (p. ej. K5 sin cerrados)
+    unidad: str | None = None
+    detalle: dict = {}
+
+
+class TableroOut(BaseModel):
+    desde: date
+    hasta: date
+    generado_en: datetime
+    indicadores: list[Indicador]
+
+
+class KpiListaOut(BaseModel):
+    id: str
+    nombre: str
+    texto_vacio: str | None  # se muestra si la lista viene vacía (K8: "No hay compromisos vencidos")
+    eventos: list[EventoOut]
+    compromisos: list[CompromisoPendienteOut]
+
+
+# ---------------------------------------------------------------- Sprints 5 y 6
+class ClaveApiIn(BaseModel):
+    nombre: str = Field(min_length=1, max_length=120)
+
+
+class ClaveApiOut(BaseModel):
+    id: uuid.UUID
+    nombre: str
+    prefijo: str
+    creado_en: datetime
+    revocada_en: datetime | None
+    ultimo_uso: datetime | None
+    usos: int
+
+
+class ClaveApiCreada(ClaveApiOut):
+    clave: str  # en claro, solo en esta respuesta
+
+
+class UsuarioPatch(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    rol: Rol | None = None
+    activo: bool | None = None
+    clave: str | None = Field(default=None, min_length=8)  # restablecer clave
+
+
+class AreaPatch(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1, max_length=120)
+    activa: bool | None = None
+
+
+class SubtipoIn(BaseModel):
+    tipo: Tipo
+    nombre: str = Field(pattern="^[a-z0-9_]{2,40}$")
+
+
+class SubtipoPatch(BaseModel):
+    activo: bool
+
+
+class SubtipoOut(BaseModel):
+    tipo: Tipo
+    nombre: str
+    activo: bool
+    base: bool  # true si viene de fábrica
