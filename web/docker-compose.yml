@@ -1,0 +1,60 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bitacora}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bitacora}
+      POSTGRES_DB: ${POSTGRES_DB:-bitacora}
+      TZ: UTC
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Dentro de la red de Docker el host de la base es "db", no "localhost".
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-bitacora}:${POSTGRES_PASSWORD:-bitacora}@db:5432/${POSTGRES_DB:-bitacora}
+      SECRET_KEY: ${SECRET_KEY:-dev-inseguro-cambiar}
+      ZONA_HORARIA: ${ZONA_HORARIA:-America/Bogota}
+      TOKEN_HORAS: ${TOKEN_HORAS:-12}
+      SEED_JEFE_CORREO: ${SEED_JEFE_CORREO:-}
+      SEED_JEFE_NOMBRE: ${SEED_JEFE_NOMBRE:-}
+      SEED_JEFE_CLAVE: ${SEED_JEFE_CLAVE:-}
+    ports: ["8000:8000"]
+
+  # Respaldo automático diario (perfil opcional): docker compose --profile respaldo up -d
+  respaldo:
+    image: postgres:16
+    profiles: ["respaldo"]
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-bitacora}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-bitacora}
+      PGDATABASE: ${POSTGRES_DB:-bitacora}
+    volumes: ["./respaldos:/respaldos"]
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          f=/respaldos/bitacora-$$(date +%Y%m%d-%H%M%S).sql.gz
+          pg_dump --no-owner | gzip > "$$f" && echo "respaldo: $$f"
+          ls -1t /respaldos/bitacora-*.sql.gz | tail -n +15 | xargs -r rm -f
+          sleep 86400
+        done
+
+volumes:
+  pgdata:

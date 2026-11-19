@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Metadatos de Windows al copiar/descomprimir (ADS)
+*Zone.Identifier
+*:Zone.Identifier
+
+# IDE / SO
+.DS_Store
+Thumbs.db
+desktop/app_head.txt

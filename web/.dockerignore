@@ -1,0 +1,11 @@
+.venv
+__pycache__
+*.pyc
+.env
+.git
+tests
+desktop
+.pytest_cache
+*Zone.Identifier
+*:Zone.Identifier
+.DS_Store
