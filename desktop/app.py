@@ -698,32 +698,53 @@ class ListaKpi(tk.Toplevel):
             Detalle(self, self.c, t.item(sel[0])["values"][0])
 
 
+
+
+
 class Administracion(tk.Toplevel):
-    """CU-16, CU-17 y CU-18. Usuarios y claves de API: solo el jefe. Áreas y subtipos: encargado y jefe."""
+    """Administracion: usuarios, claves API y roles (solo jefe); areas y subtipos (encargado y jefe)."""
 
     def __init__(self, padre, cliente: ClienteApi):
         super().__init__(padre)
         self.c = cliente
         self.es_jefe = cliente.usuario["rol"] == "jefe"
-        self.title("Administración")
-        self.geometry("820x480")
+        self.title("Administracion")
+        self.geometry("900x500")
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True, padx=6, pady=6)
-        self.t_areas = self._pestana(nb, "Áreas", ("nombre", "activa"), ("Área", "Activa"), (400, 100),
-                                     [("Agregar…", self.area_nueva), ("Renombrar…", self.area_renombrar),
-                                      ("Activar / desactivar", self.area_alternar)])
-        self.t_sub = self._pestana(nb, "Subtipos", ("tipo", "nombre", "activo", "origen"),
-                                   ("Tipo", "Subtipo", "Activo", "Origen"), (120, 260, 90, 120),
-                                   [("Agregar…", self.sub_nuevo), ("Activar / desactivar", self.sub_alternar)])
+        self.t_areas = self._pestana(
+            nb, "Areas", ("nombre", "activa"), ("Area", "Activa"), (400, 100),
+            [("Agregar...", self.area_nueva), ("Renombrar...", self.area_renombrar),
+             ("Activar / desactivar", self.area_alternar)])
+        self.t_sub = self._pestana(
+            nb, "Subtipos", ("tipo", "nombre", "activo", "origen"),
+            ("Tipo", "Subtipo", "Activo", "Origen"), (120, 260, 90, 120),
+            [("Agregar...", self.sub_nuevo), ("Activar / desactivar", self.sub_alternar)])
         if self.es_jefe:
-            self.t_usr = self._pestana(nb, "Usuarios", ("nombre", "correo", "rol", "activo"),
-                                       ("Nombre", "Correo", "Rol", "Activo"), (200, 240, 100, 80),
-                                       [("Agregar…", self.usr_nuevo), ("Cambiar rol…", self.usr_rol),
-                                        ("Restablecer clave…", self.usr_clave), ("Activar / desactivar", self.usr_alternar)])
-            self.t_api = self._pestana(nb, "Claves API", ("nombre", "prefijo", "creada", "ultimo", "usos", "estado"),
-                                       ("Nombre", "Empieza con", "Creada", "Último uso", "Usos", "Estado"),
-                                       (170, 90, 120, 130, 60, 90),
-                                       [("Emitir clave…", self.api_nueva), ("Revocar", self.api_revocar)])
+            self.t_usr = self._pestana(
+                nb, "Usuarios",
+                ("nombre", "correo", "rol", "activo"),
+                ("Nombre", "Correo", "Rol", "Activo"),
+                (180, 220, 200, 70),
+                [("Actualizar", self.recargar),
+                 ("Agregar...", self.usr_nuevo),
+                 ("Cambiar rol...", self.usr_rol),
+                 ("Restablecer clave...", self.usr_clave),
+                 ("Activar / desactivar", self.usr_alternar)])
+            self.t_api = self._pestana(
+                nb, "Claves API",
+                ("nombre", "prefijo", "creada", "ultimo", "usos", "estado"),
+                ("Nombre", "Empieza con", "Creada", "Ultimo uso", "Usos", "Estado"),
+                (170, 90, 120, 130, 60, 90),
+                [("Emitir clave...", self.api_nueva), ("Revocar", self.api_revocar)])
+            self.t_roles = self._pestana(
+                nb, "Roles personalizados",
+                ("nombre", "descripcion", "permisos", "activo"),
+                ("Nombre", "Descripcion", "Permisos", "Activo"),
+                (140, 200, 300, 60),
+                [("Nuevo rol...", self.rol_nuevo),
+                 ("Editar permisos...", self.rol_editar),
+                 ("Activar / desactivar", self.rol_alternar)])
         self.recargar()
 
     def _pestana(self, nb, titulo, cols, encabezados, anchos, botones):
@@ -763,39 +784,56 @@ class Administracion(tk.Toplevel):
             t.delete(*t.get_children())
             for iid, vals in filas:
                 t.insert("", "end", iid=iid, values=vals)
-        poner(self.t_areas, [(a["id"], (a["nombre"], "sí" if a["activa"] else "no")) for a in self.c.areas_todas()])
-        poner(self.t_sub, [(f"{s['tipo']}/{s['nombre']}", (s["tipo"], s["nombre"], "sí" if s["activo"] else "no",
-                                                           "de fábrica" if s["base"] else "agregado"))
-                           for s in self.c.subtipos(incluir_inactivos=True)])
-        if self.es_jefe:
-            poner(self.t_usr, [(u["id"], (u["nombre"], u["correo"], u["rol"], "sí" if u["activo"] else "no"))
-                               for u in self.c.usuarios()])
-            poner(self.t_api, [(k["id"], (k["nombre"], k["prefijo"] + "…", (k["creado_en"] or "")[:10],
-                                          (k["ultimo_uso"] or "nunca")[:16].replace("T", " "), k["usos"],
-                                          "revocada" if k["revocada_en"] else "activa")) for k in self.c.claves_api()])
+        poner(self.t_areas,
+              [(a["id"], (a["nombre"], "si" if a["activa"] else "no"))
+               for a in self.c.areas_todas()])
+        poner(self.t_sub,
+              [("{}/{}".format(s["tipo"], s["nombre"]),
+                (s["tipo"], s["nombre"],
+                 "si" if s["activo"] else "no",
+                 "de fabrica" if s["base"] else "agregado"))
+               for s in self.c.subtipos(incluir_inactivos=True)])
+        if not self.es_jefe:
+            return
+        poner(self.t_usr,
+              [(u["id"], (u["nombre"], u["correo"],
+                          u.get("rol_custom_nombre") or u["rol"],
+                          "si" if u["activo"] else "no"))
+               for u in self.c.usuarios()])
+        poner(self.t_api,
+              [(k["id"], (k["nombre"], k["prefijo"] + "...",
+                          (k["creado_en"] or "")[:10],
+                          (k["ultimo_uso"] or "nunca")[:16].replace("T", " "),
+                          k["usos"],
+                          "revocada" if k["revocada_en"] else "activa"))
+               for k in self.c.claves_api()])
+        poner(self.t_roles,
+              [(r["id"], (r["nombre"], r["descripcion"],
+                          ", ".join(r["permisos"]) or "-",
+                          "si" if r["activo"] else "no"))
+               for r in self.c.roles(incluir_inactivos=True)])
 
-    # --- áreas
     def area_nueva(self):
-        n = simpledialog.askstring("Área", "Nombre del área:", parent=self)
+        n = simpledialog.askstring("Area", "Nombre del area:", parent=self)
         if n:
             self._hacer(lambda: self.c.crear_area(n))
 
     def area_renombrar(self):
         i = self._sel(self.t_areas)
-        n = i and simpledialog.askstring("Área", "Nuevo nombre:", parent=self)
+        n = i and simpledialog.askstring("Area", "Nuevo nombre:", parent=self)
         if n:
             self._hacer(lambda: self.c.modificar_area(i, {"nombre": n}))
 
     def area_alternar(self):
         i = self._sel(self.t_areas)
         if i:
-            activa = self.t_areas.item(i)["values"][1] == "sí"
+            activa = self.t_areas.item(i)["values"][1] == "si"
             self._hacer(lambda: self.c.modificar_area(i, {"activa": not activa}))
 
-    # --- subtipos
     def sub_nuevo(self):
-        tipo = simpledialog.askstring("Subtipo", f"Tipo ({', '.join(TIPOS)}):", parent=self)
-        nombre = tipo and simpledialog.askstring("Subtipo", "Nombre (minúsculas, sin espacios, ej. capacitacion):", parent=self)
+        tipos_str = ", ".join(TIPOS)
+        tipo = simpledialog.askstring("Subtipo", "Tipo (" + tipos_str + "):", parent=self)
+        nombre = tipo and simpledialog.askstring("Subtipo", "Nombre (minusculas, sin espacios):", parent=self)
         if tipo and nombre:
             self._hacer(lambda: self.c.crear_subtipo(tipo.strip(), nombre.strip()))
 
@@ -803,39 +841,106 @@ class Administracion(tk.Toplevel):
         i = self._sel(self.t_sub)
         if i:
             tipo, nombre = i.split("/", 1)
-            activo = self.t_sub.item(i)["values"][2] == "sí"
+            activo = self.t_sub.item(i)["values"][2] == "si"
             self._hacer(lambda: self.c.activar_subtipo(tipo, nombre, not activo))
 
-    # --- usuarios
     def usr_nuevo(self):
         nombre = simpledialog.askstring("Usuario", "Nombre:", parent=self)
         correo = nombre and simpledialog.askstring("Usuario", "Correo:", parent=self)
-        rol = correo and simpledialog.askstring("Usuario", "Rol (asistente, encargado, jefe):", parent=self)
-        clave = rol and simpledialog.askstring("Usuario", "Clave inicial (mínimo 8):", show="*", parent=self)
+        rol = correo and simpledialog.askstring("Usuario", "Rol (asistente / encargado / jefe):", parent=self)
+        clave = rol and simpledialog.askstring("Usuario", "Clave inicial (minimo 8):", show="*", parent=self)
         if clave:
             self._hacer(lambda: self.c.crear_usuario(nombre, correo, rol.strip(), clave))
 
     def usr_rol(self):
+        """Cambiar el rol del usuario: base o personalizado."""
         i = self._sel(self.t_usr)
-        rol = i and simpledialog.askstring("Rol", "Nuevo rol (asistente, encargado, jefe):", parent=self)
-        if rol:
-            self._hacer(lambda: self.c.modificar_usuario(i, {"rol": rol.strip()}))
+        if not i:
+            return
+        # Obtener roles personalizados disponibles
+        try:
+            roles = self.c.roles()
+        except ErrorApi:
+            roles = []
+        # Construir opciones: primero los 3 base, luego los personalizados
+        base = ["asistente", "encargado", "jefe"]
+        opciones = base + [r["nombre"] for r in roles]
+        win = tk.Toplevel(self)
+        win.title("Cambiar rol")
+        win.resizable(False, False)
+        win.grab_set()
+        f = ttk.Frame(win, padding=12)
+        f.pack()
+        ttk.Label(f, text="Selecciona el nuevo rol:").pack(anchor="w")
+        # Valor actual
+        vals = self.t_usr.item(i)["values"]
+        actual = vals[2] if len(vals) > 2 else opciones[0]
+        sel_var = tk.StringVar(value=actual if actual in opciones else opciones[0])
+        ttk.Combobox(f, textvariable=sel_var, values=opciones, state="readonly", width=36).pack(pady=6)
+        def confirmar():
+            elegido = sel_var.get()
+            if elegido in base:
+                # Rol base: limpiar custom y poner rol base
+                self._hacer(lambda: (
+                    self.c.asignar_rol_custom(i, None),
+                    self.c.modificar_usuario(i, {"rol": elegido})
+                ))
+            else:
+                # Rol personalizado
+                rol_id = next(r["id"] for r in roles if r["nombre"] == elegido)
+                self._hacer(lambda: self.c.asignar_rol_custom(i, rol_id))
+            win.destroy()
+        ttk.Button(f, text="Guardar", command=confirmar).pack(side="right", pady=4)
+        ttk.Button(f, text="Cancelar", command=win.destroy).pack(side="right", padx=4)
+
+    def usr_rol_custom(self):
+        i = self._sel(self.t_usr)
+        if not i:
+            return
+        try:
+            roles = self.c.roles()
+        except ErrorApi as e:
+            messagebox.showerror("Error", str(e), parent=self)
+            return
+        if not roles:
+            messagebox.showinfo("Sin roles",
+                                "No hay roles personalizados activos. Crea uno en la pestana Roles personalizados.",
+                                parent=self)
+            return
+        win = tk.Toplevel(self)
+        win.title("Asignar rol personalizado")
+        win.resizable(False, False)
+        win.grab_set()
+        f = ttk.Frame(win, padding=12)
+        f.pack()
+        ttk.Label(f, text="Selecciona el rol a asignar:").pack(anchor="w")
+        opciones = ["-- quitar rol personalizado --"] + [r["nombre"] for r in roles]
+        sel_var = tk.StringVar(value=opciones[0])
+        ttk.Combobox(f, textvariable=sel_var, values=opciones, state="readonly", width=40).pack(pady=6)
+        def confirmar():
+            nombre_sel = sel_var.get()
+            rol_id = None
+            if nombre_sel != opciones[0]:
+                rol_id = next(r["id"] for r in roles if r["nombre"] == nombre_sel)
+            self._hacer(lambda: self.c.asignar_rol_custom(i, rol_id))
+            win.destroy()
+        ttk.Button(f, text="Asignar", command=confirmar).pack(side="right", pady=4)
+        ttk.Button(f, text="Cancelar", command=win.destroy).pack(side="right", padx=4)
 
     def usr_clave(self):
         i = self._sel(self.t_usr)
-        clave = i and simpledialog.askstring("Clave", "Nueva clave (mínimo 8):", show="*", parent=self)
+        clave = i and simpledialog.askstring("Clave", "Nueva clave (minimo 8):", show="*", parent=self)
         if clave:
             self._hacer(lambda: self.c.modificar_usuario(i, {"clave": clave}))
 
     def usr_alternar(self):
         i = self._sel(self.t_usr)
         if i:
-            activo = self.t_usr.item(i)["values"][3] == "sí"
+            activo = self.t_usr.item(i)["values"][3] == "si"
             self._hacer(lambda: self.c.modificar_usuario(i, {"activo": not activo}))
 
-    # --- claves de API
     def api_nueva(self):
-        n = simpledialog.askstring("Clave de API", "¿Para qué programa es? (nombre):", parent=self)
+        n = simpledialog.askstring("Clave de API", "Para que programa es? (nombre):", parent=self)
         if not n:
             return
         try:
@@ -845,16 +950,90 @@ class Administracion(tk.Toplevel):
             return
         self.clipboard_clear()
         self.clipboard_append(k["clave"])
+        clave_val = k["clave"]
         messagebox.showinfo(
             "Clave emitida",
-            f"{k['clave']}\n\nCópiala ahora (ya está en el portapapeles): no se volverá a mostrar.\n"
-            "El programa externo la envía en el encabezado X-API-Key.", parent=self)
+            clave_val + "\n\nCopiala ahora (ya esta en el portapapeles): no se volvera a mostrar.\n"
+            "El programa externo la envia en el encabezado X-API-Key.",
+            parent=self)
         self.recargar()
 
     def api_revocar(self):
         i = self._sel(self.t_api)
-        if i and messagebox.askyesno("Revocar", "El programa que use esta clave perderá el acceso de inmediato. ¿Continuar?", parent=self):
+        if i and messagebox.askyesno("Revocar",
+                                     "El programa que use esta clave perdera el acceso. Continuar?",
+                                     parent=self):
             self._hacer(lambda: self.c.revocar_clave_api(i))
+
+    def rol_nuevo(self):
+        nombre = simpledialog.askstring("Nuevo rol", "Nombre del rol:", parent=self)
+        if not nombre:
+            return
+        descripcion = simpledialog.askstring("Nuevo rol", "Descripcion breve (opcional):", parent=self) or ""
+        try:
+            disponibles = self.c.permisos_disponibles()
+        except ErrorApi as e:
+            messagebox.showerror("Error", str(e), parent=self)
+            return
+        nombre_ok = nombre.strip()
+        self._dialogo_permisos(nombre_ok, descripcion, disponibles, [],
+                               lambda ps: self.c.crear_rol(nombre_ok, descripcion, ps))
+
+    def rol_editar(self):
+        i = self._sel(self.t_roles)
+        if not i:
+            return
+        try:
+            disponibles = self.c.permisos_disponibles()
+            roles = self.c.roles(incluir_inactivos=True)
+            rol = next((r for r in roles if r["id"] == i), None)
+        except ErrorApi as e:
+            messagebox.showerror("Error", str(e), parent=self)
+            return
+        if not rol:
+            return
+        self._dialogo_permisos(rol["nombre"], rol["descripcion"], disponibles,
+                               rol["permisos"],
+                               lambda ps: self.c.editar_rol(i, {"permisos": ps}))
+
+    def rol_alternar(self):
+        i = self._sel(self.t_roles)
+        if i:
+            activo = self.t_roles.item(i)["values"][3] == "si"
+            self._hacer(lambda: self.c.editar_rol(i, {"activo": not activo}))
+
+    def _dialogo_permisos(self, nombre, descripcion, disponibles, permisos_actuales, callback):
+        win = tk.Toplevel(self)
+        win.title("Permisos: " + nombre)
+        win.geometry("540x500")
+        win.grab_set()
+        ttk.Label(win, text="Rol: " + nombre + "  |  " + descripcion, padding=8).pack(anchor="w")
+        ttk.Label(win, text="Marca los permisos que tendra este rol:", padding=(8, 0)).pack(anchor="w")
+        frame = ttk.Frame(win, padding=8)
+        frame.pack(fill="both", expand=True)
+        canvas = tk.Canvas(frame)
+        sb = ttk.Scrollbar(frame, orient="vertical", command=canvas.yview)
+        interior = ttk.Frame(canvas)
+        interior.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=interior, anchor="nw")
+        canvas.configure(yscrollcommand=sb.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+        vars_perm = {}
+        for p in disponibles:
+            var = tk.BooleanVar(value=p["codigo"] in permisos_actuales)
+            vars_perm[p["codigo"]] = var
+            ttk.Checkbutton(interior,
+                            text="  " + p["codigo"] + "  -  " + p["descripcion"],
+                            variable=var).pack(anchor="w", padx=4, pady=2)
+        def guardar():
+            seleccionados = [cod for cod, v in vars_perm.items() if v.get()]
+            self._hacer(lambda: callback(seleccionados))
+            win.destroy()
+        barra = ttk.Frame(win, padding=8)
+        barra.pack(fill="x")
+        ttk.Button(barra, text="Guardar", command=guardar).pack(side="right")
+        ttk.Button(barra, text="Cancelar", command=win.destroy).pack(side="right", padx=4)
 
 
 def main():

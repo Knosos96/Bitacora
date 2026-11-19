@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.enums import Rol
+from app.enums import PERMISOS_BASE, Permiso, Rol
 from app.models import Usuario
 from app.security import leer_token
 
@@ -28,9 +28,29 @@ def usuario_actual(
     return usuario
 
 
+def permisos_de(usuario: Usuario) -> set[Permiso]:
+    """Devuelve el conjunto de permisos efectivos del usuario.
+    Si tiene un rol personalizado activo, usa sus permisos; si no, usa los del rol base."""
+    if usuario.rol_custom_id and usuario.rol_custom and usuario.rol_custom.activo:
+        return {Permiso(p) for p in usuario.rol_custom.permisos if p in Permiso._value2member_map_}
+    return PERMISOS_BASE.get(usuario.rol, set())
+
+
 def requiere_rol(*roles: Rol):
     def dependencia(u: Usuario = Depends(usuario_actual)) -> Usuario:
         if u.rol not in roles:
+            raise HTTPException(409, {"codigo": "sin_permiso", "detalle": "Tu rol no permite esta acción"})
+        return u
+
+    return dependencia
+
+
+def requiere_permiso(*permisos: Permiso):
+    """Dependencia que verifica que el usuario tenga AL MENOS UNO de los permisos indicados
+    (bien por su rol base o por su rol personalizado)."""
+    def dependencia(u: Usuario = Depends(usuario_actual)) -> Usuario:
+        efectivos = permisos_de(u)
+        if not efectivos.intersection(permisos):
             raise HTTPException(409, {"codigo": "sin_permiso", "detalle": "Tu rol no permite esta acción"})
         return u
 

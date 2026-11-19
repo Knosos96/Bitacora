@@ -143,3 +143,4 @@ pytest -q   # No requiere PostgreSQL ni Docker (usa SQLite en memoria)
 | `jefe` | Acceso total: tablero KPI, administración, claves API, reabrir/cancelar/cerrar |
 | `encargado` | Gestión de eventos, compromisos, estados, correcciones |
 | `asistente` | Registrar eventos, notas y compromisos propios, avanzar estados hasta `resuelto` |
+

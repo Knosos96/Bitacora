@@ -155,3 +155,19 @@ class ClienteApi:
 
     def revocar_clave_api(self, clave_id: str) -> dict:
         return self._pedir("DELETE", f"/claves-api/{clave_id}")
+
+    # --- Roles personalizados -----------------------------------------------
+    def roles(self, incluir_inactivos: bool = False) -> list[dict]:
+        return self._pedir("GET", "/roles", params={"incluir_inactivos": incluir_inactivos})
+
+    def permisos_disponibles(self) -> list[dict]:
+        return self._pedir("GET", "/roles/permisos")
+
+    def crear_rol(self, nombre: str, descripcion: str, permisos: list[str]) -> dict:
+        return self._pedir("POST", "/roles", json={"nombre": nombre, "descripcion": descripcion, "permisos": permisos})
+
+    def editar_rol(self, rol_id: str, cambios: dict) -> dict:
+        return self._pedir("PATCH", f"/roles/{rol_id}", json=cambios)
+
+    def asignar_rol_custom(self, usuario_id: str, rol_id: str | None) -> dict:
+        return self._pedir("POST", "/roles/asignar", params={"usuario_id": usuario_id, "rol_id": rol_id})

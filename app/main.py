@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.routers import areas, auth, claves, compromisos, eventos, kpi, pendientes, subtipos, usuarios
+from app.routers import areas, auth, claves, compromisos, eventos, kpi, pendientes, roles, subtipos, usuarios
 
 app = FastAPI(
     title="Bitácora TI",
@@ -9,7 +9,8 @@ app = FastAPI(
     docs_url="/api/v1/docs",
 )
 
-for r in (auth.router, usuarios.router, areas.router, eventos.router, compromisos.router, pendientes.router, kpi.router, claves.router, subtipos.router):
+for r in (auth.router, usuarios.router, areas.router, eventos.router, compromisos.router,
+          pendientes.router, kpi.router, claves.router, subtipos.router, roles.router):
     app.include_router(r, prefix="/api/v1")
 
 

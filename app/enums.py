@@ -7,6 +7,59 @@ class Rol(str, enum.Enum):
     asistente = "asistente"
 
 
+class Permiso(str, enum.Enum):
+    """Permisos granulares para roles personalizados."""
+    # Usuarios
+    ver_usuarios = "ver_usuarios"
+    crear_usuarios = "crear_usuarios"
+    editar_usuarios = "editar_usuarios"
+    # Roles personalizados
+    gestionar_roles = "gestionar_roles"
+    # KPI / tablero
+    ver_kpi = "ver_kpi"
+    # Eventos
+    crear_eventos = "crear_eventos"
+    editar_cabecera = "editar_cabecera"       # corregir título, descripción, etc.
+    cambiar_estado = "cambiar_estado"          # avanzar hasta resuelto
+    cancelar_cerrar = "cancelar_cerrar"        # cancelar o cerrar eventos
+    reabrir_eventos = "reabrir_eventos"        # reabrir cerrados/cancelados
+    # Compromisos
+    gestionar_compromisos = "gestionar_compromisos"
+    # Áreas
+    gestionar_areas = "gestionar_areas"
+    # Subtipos
+    gestionar_subtipos = "gestionar_subtipos"
+    # Claves API
+    gestionar_claves_api = "gestionar_claves_api"
+    # Exportar
+    exportar_csv = "exportar_csv"
+
+
+# Permisos que tiene cada rol base por defecto
+PERMISOS_BASE: dict[Rol, set[Permiso]] = {
+    Rol.jefe: set(Permiso),  # todo
+    Rol.encargado: {
+        Permiso.ver_usuarios,
+        Permiso.ver_kpi,
+        Permiso.crear_eventos,
+        Permiso.editar_cabecera,
+        Permiso.cambiar_estado,
+        Permiso.cancelar_cerrar,
+        Permiso.reabrir_eventos,
+        Permiso.gestionar_compromisos,
+        Permiso.gestionar_areas,
+        Permiso.gestionar_subtipos,
+        Permiso.exportar_csv,
+    },
+    Rol.asistente: {
+        Permiso.crear_eventos,
+        Permiso.cambiar_estado,
+        Permiso.gestionar_compromisos,
+        Permiso.exportar_csv,
+    },
+}
+
+
 class Tipo(str, enum.Enum):
     solicitud = "solicitud"
     incidencia = "incidencia"

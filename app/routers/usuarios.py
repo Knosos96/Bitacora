@@ -2,16 +2,29 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db import get_db
 from app.deps import requiere_rol
 from app.enums import Rol
-from app.models import Usuario
+from app.models import RolPersonalizado, Usuario
 from app.schemas import UsuarioIn, UsuarioOut, UsuarioPatch
 from app.security import hashear_clave
 
 router = APIRouter(prefix="/usuarios", tags=["usuarios"])
+
+
+def _a_salida(u: Usuario) -> UsuarioOut:
+    """Convierte un Usuario al schema de salida incluyendo el nombre del rol personalizado."""
+    return UsuarioOut(
+        id=u.id,
+        nombre=u.nombre,
+        correo=u.correo,
+        rol=u.rol,
+        activo=u.activo,
+        rol_custom_id=u.rol_custom_id,
+        rol_custom_nombre=u.rol_custom.nombre if u.rol_custom else None,
+    )
 
 
 @router.post("", response_model=UsuarioOut, status_code=201)
@@ -26,7 +39,8 @@ def crear_usuario(
     u = Usuario(nombre=datos.nombre, correo=correo, rol=datos.rol, clave_hash=hashear_clave(datos.clave))
     db.add(u)
     db.commit()
-    return u
+    db.refresh(u)
+    return _a_salida(u)
 
 
 @router.get("", response_model=list[UsuarioOut])
@@ -34,7 +48,12 @@ def listar_usuarios(
     db: Session = Depends(get_db),
     _: Usuario = Depends(requiere_rol(Rol.jefe, Rol.encargado)),
 ):
-    return db.scalars(select(Usuario).order_by(Usuario.nombre)).all()
+    usuarios = db.scalars(
+        select(Usuario)
+        .options(joinedload(Usuario.rol_custom))
+        .order_by(Usuario.nombre)
+    ).all()
+    return [_a_salida(u) for u in usuarios]
 
 
 @router.patch("/{usuario_id}", response_model=UsuarioOut)
@@ -71,4 +90,10 @@ def modificar_usuario(
     if datos.clave is not None:
         u.clave_hash = hashear_clave(datos.clave)
     db.commit()
-    return u
+    # Recargar con relacion para incluir rol_custom_nombre en la respuesta
+    u = db.scalar(
+        select(Usuario)
+        .where(Usuario.id == usuario_id)
+        .options(joinedload(Usuario.rol_custom))
+    )
+    return _a_salida(u)

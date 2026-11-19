@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
-from app.enums import Estado, Prioridad, Rol, Tipo
+from app.enums import Estado, Permiso, Prioridad, Rol, Tipo
 
 
 class LoginIn(BaseModel):
@@ -25,6 +25,8 @@ class UsuarioOut(BaseModel):
     correo: str
     rol: Rol
     activo: bool
+    rol_custom_id: uuid.UUID | None = None
+    rol_custom_nombre: str | None = None  # nombre del rol personalizado si tiene uno asignado
 
 
 class TokenOut(BaseModel):
@@ -269,3 +271,27 @@ class SubtipoOut(BaseModel):
     nombre: str
     activo: bool
     base: bool  # true si viene de fábrica
+
+
+# ---------------------------------------------------------------- Roles personalizados
+class RolPersonalizadoIn(BaseModel):
+    nombre: str = Field(min_length=1, max_length=80)
+    descripcion: str | None = None
+    permisos: list[Permiso] = Field(default_factory=list)
+
+
+class RolPersonalizadoPatch(BaseModel):
+    nombre: str | None = Field(default=None, min_length=1, max_length=80)
+    descripcion: str | None = None
+    permisos: list[Permiso] | None = None
+    activo: bool | None = None
+
+
+class RolPersonalizadoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    nombre: str
+    descripcion: str
+    permisos: list[str]
+    activo: bool
+    creado_en: datetime

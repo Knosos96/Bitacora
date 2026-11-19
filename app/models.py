@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, Uuid, event
+from sqlalchemy import JSON, Boolean, Date, DateTime, Enum, ForeignKey, Index, Integer, String, Text, Uuid, event
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -17,6 +17,22 @@ def _ahora():
     return datetime.now(timezone.utc)
 
 
+class RolPersonalizado(Base):
+    """Rol creado por el jefe con permisos granulares. No reemplaza jefe/encargado/asistente,
+    se asigna en lugar del rol base cuando el usuario tiene rol_custom_id."""
+
+    __tablename__ = "rol_personalizado"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    nombre: Mapped[str] = mapped_column(String(80), unique=True)
+    descripcion: Mapped[str] = mapped_column(Text, default="")
+    # Lista de valores de Permiso (strings), guardada como JSON array.
+    permisos: Mapped[list] = mapped_column(JSON, default=list)
+    activo: Mapped[bool] = mapped_column(Boolean, default=True)
+    creado_por_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("usuario.id"))
+    creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+
+
 class Usuario(Base):
     __tablename__ = "usuario"
 
@@ -27,6 +43,10 @@ class Usuario(Base):
     clave_hash: Mapped[str] = mapped_column(String(255))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+    # Rol personalizado opcional. Si está definido, sus permisos sobreescriben al rol base.
+    rol_custom_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rol_personalizado.id"), nullable=True)
+
+    rol_custom: Mapped["RolPersonalizado | None"] = relationship(foreign_keys=[rol_custom_id])
 
 
 class Area(Base):
