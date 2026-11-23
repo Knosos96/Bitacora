@@ -4,11 +4,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from app.db import Base, get_db
-from app.enums import Rol
+from app.core.db import Base, get_db
+from app.core.enums import Rol
 from app.main import app
 from app.models import Area, Usuario
-from app.security import hashear_clave
+from app.core.security import hashear_clave
 
 
 @pytest.fixture()

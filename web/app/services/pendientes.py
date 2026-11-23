@@ -2,7 +2,8 @@
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.enums import Estado, EstadoCompromiso, Rol
+from app.core.deps import tiene_permiso
+from app.core.enums import Estado, EstadoCompromiso, Permiso
 from app.models import Compromiso, Evento, Usuario
 from app.schemas import CompromisoPendienteOut, PendientesOut
 from app.services.eventos import a_salida, compromiso_a_salida, con_relaciones, hoy_en_zona
@@ -11,7 +12,8 @@ NO_CERRADOS = (Estado.abierto, Estado.en_proceso, Estado.en_espera, Estado.resue
 
 
 def listar(db: Session, usuario: Usuario, solo_mios: bool = False, solo_vencidos: bool = False) -> PendientesOut:
-    mios = solo_mios or usuario.rol == Rol.asistente
+    puede_ver_todos = tiene_permiso(usuario, Permiso.ver_kpi, Permiso.editar_cabecera)
+    mios = solo_mios or not puede_ver_todos
 
     q_ev = con_relaciones().where(Evento.requiere_seguimiento, Evento.estado.in_(NO_CERRADOS))
     if mios:

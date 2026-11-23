@@ -1,6 +1,6 @@
 """La máquina de estados no toca la base: se prueba sola."""
-from app.enums import Estado, Rol
-from app.estados import transicion_valida
+from app.core.enums import Estado, Rol
+from app.services.estados import transicion_valida
 
 
 def test_avance_normal():

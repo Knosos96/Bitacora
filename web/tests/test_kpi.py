@@ -62,7 +62,7 @@ def test_semana_de_prueba_criterio_de_listo_sprint4(equipo):
 
 def test_k8_lista_el_compromiso_vencido_y_responde_en_vacio(equipo):
     from app.main import app
-    from app.db import get_db
+    from app.core.db import get_db
     from app.models import Compromiso
 
     c = equipo
@@ -89,7 +89,7 @@ def test_k8_lista_el_compromiso_vencido_y_responde_en_vacio(equipo):
 
 def test_k7_incumplido_y_cancelado_no_cuenta(equipo):
     from app.main import app
-    from app.db import get_db
+    from app.core.db import get_db
     from app.models import Compromiso
 
     c = equipo

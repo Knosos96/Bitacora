@@ -2,10 +2,11 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.core.enums import Estado, Prioridad, Tipo
 from app.schemas.area import AreaRef
+from app.schemas.common import validar_no_blanco
 from app.schemas.compromiso import CompromisoOut
 from app.schemas.usuario import UsuarioRef
 
@@ -14,14 +15,19 @@ class EventoIn(BaseModel):
     tipo: Tipo
     subtipo: str | None = None
     titulo: str = Field(min_length=1, max_length=200)
-    descripcion: str = Field(min_length=1)
-    referencia: str | None = None
+    descripcion: str = Field(min_length=1, max_length=20000)
+    referencia: str | None = Field(default=None, max_length=500)
     fecha_hecho: date | None = None
     area_id: uuid.UUID | None = None
-    solicitante_nombre: str | None = None
+    solicitante_nombre: str | None = Field(default=None, max_length=120)
     requiere_seguimiento: bool = False
     prioridad: Prioridad | None = None
     responsable_id: uuid.UUID | None = None
+
+    @field_validator("titulo", "descripcion")
+    @classmethod
+    def _no_blanco(cls, v: str) -> str:
+        return validar_no_blanco(v)
 
 
 class EventoOut(BaseModel):
@@ -69,11 +75,16 @@ class EventoPatch(BaseModel):
     tipo: Tipo | None = None
     subtipo: str | None = None
     titulo: str | None = Field(default=None, min_length=1, max_length=200)
-    descripcion: str | None = Field(default=None, min_length=1)
-    referencia: str | None = None
+    descripcion: str | None = Field(default=None, min_length=1, max_length=20000)
+    referencia: str | None = Field(default=None, max_length=500)
     fecha_hecho: date | None = None
     area_id: uuid.UUID | None = None
-    solicitante_nombre: str | None = None
+    solicitante_nombre: str | None = Field(default=None, max_length=120)
+
+    @field_validator("titulo", "descripcion")
+    @classmethod
+    def _no_blanco(cls, v: str | None) -> str | None:
+        return validar_no_blanco(v)
 
 
 class CambioEstadoIn(BaseModel):
@@ -84,6 +95,11 @@ class CambioEstadoIn(BaseModel):
 
 class SeguimientoIn(BaseModel):
     nota: str = Field(min_length=1, max_length=5000)
+
+    @field_validator("nota")
+    @classmethod
+    def _no_blanco(cls, v: str) -> str:
+        return validar_no_blanco(v)
 
 
 class SeguimientoOut(BaseModel):

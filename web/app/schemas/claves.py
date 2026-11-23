@@ -2,11 +2,18 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from app.schemas.common import validar_no_blanco
 
 
 class ClaveApiIn(BaseModel):
     nombre: str = Field(min_length=1, max_length=120)
+
+    @field_validator("nombre")
+    @classmethod
+    def _nombre_valido(cls, v: str) -> str:
+        return validar_no_blanco(v)
 
 
 class ClaveApiOut(BaseModel):

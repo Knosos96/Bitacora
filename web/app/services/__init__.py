@@ -1,1 +1,36 @@
-"""Funciones de negocio (sin HTTP)."""
+"""Servicios y funciones de lógica de negocio (separados de la capa HTTP)."""
+from app.services import (
+    areas,
+    auth,
+    busqueda,
+    claves,
+    compromisos,
+    estados,
+    eventos,
+    folio,
+    historial,
+    kpi,
+    pendientes,
+    roles,
+    subtipos,
+    superadmin,
+    usuarios,
+)
+
+__all__ = [
+    "areas",
+    "auth",
+    "busqueda",
+    "claves",
+    "compromisos",
+    "estados",
+    "eventos",
+    "folio",
+    "historial",
+    "kpi",
+    "pendientes",
+    "roles",
+    "subtipos",
+    "superadmin",
+    "usuarios",
+]

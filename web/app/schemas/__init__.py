@@ -23,6 +23,18 @@ from app.schemas.kpi import Indicador, KpiListaOut, TableroOut
 from app.schemas.pendientes import PendientesOut
 from app.schemas.roles import RolPersonalizadoIn, RolPersonalizadoOut, RolPersonalizadoPatch
 from app.schemas.subtipo import SubtipoIn, SubtipoOut, SubtipoPatch
+from app.schemas.superadmin import (
+    ActividadOut,
+    CuentaHistoricaOut,
+    ExpedienteCuentaOut,
+    PendienteHistoricoCompOut,
+    ReferenciaArchivoOut,
+    RegistroHistoricoOut,
+    RespaldoArchivoOut,
+    SuperArchivosOut,
+    SuperPendientesOut,
+    SuperResumenOut,
+)
 from app.schemas.usuario import UsuarioIn, UsuarioOut, UsuarioPatch, UsuarioRef
 
 __all__ = [
@@ -39,6 +51,9 @@ __all__ = [
     "RolPersonalizadoIn", "RolPersonalizadoOut", "RolPersonalizadoPatch",
     "SeguimientoIn", "SeguimientoOut",
     "SubtipoIn", "SubtipoOut", "SubtipoPatch",
+    "ActividadOut", "CuentaHistoricaOut", "ExpedienteCuentaOut",
+    "PendienteHistoricoCompOut", "ReferenciaArchivoOut", "RegistroHistoricoOut",
+    "RespaldoArchivoOut", "SuperArchivosOut", "SuperPendientesOut", "SuperResumenOut",
     "TableroOut",
     "TokenOut",
     "UsuarioIn", "UsuarioOut", "UsuarioPatch", "UsuarioRef",

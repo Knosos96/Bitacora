@@ -32,7 +32,7 @@ def upgrade():
     op.execute("CREATE INDEX ix_evento_busqueda_trgm ON evento USING gin (busqueda gin_trgm_ops)")
 
     # Rellenar el texto de búsqueda de los eventos que ya existían (Sprints 1 y 2).
-    from app.busqueda import normalizar
+    from app.services.busqueda import normalizar
 
     bind = op.get_bind()
     eventos = bind.execute(sa.text(

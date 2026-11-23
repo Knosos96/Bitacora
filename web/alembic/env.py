@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from alembic import context
 
 from app import models  # noqa: F401  (registra las tablas)
-from app.db import Base, engine
+from app.core.db import Base, engine
 
 target_metadata = Base.metadata
 

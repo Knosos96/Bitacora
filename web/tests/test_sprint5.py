@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from app.db import get_db
+from app.core.db import get_db
 from app.models import UsoClaveApi
 from app.services.eventos import hoy_en_zona
 from tests.test_sprint1 import cliente, entrar  # noqa: F401

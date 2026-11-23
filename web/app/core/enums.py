@@ -2,6 +2,7 @@ import enum
 
 
 class Rol(str, enum.Enum):
+    superusuario = "superusuario"
     jefe = "jefe"
     encargado = "encargado"
     asistente = "asistente"
@@ -9,6 +10,8 @@ class Rol(str, enum.Enum):
 
 class Permiso(str, enum.Enum):
     """Permisos granulares para roles personalizados."""
+    # Superusuario / auditoría documental
+    ver_superadmin = "ver_superadmin"
     # Usuarios
     ver_usuarios = "ver_usuarios"
     crear_usuarios = "crear_usuarios"
@@ -37,7 +40,8 @@ class Permiso(str, enum.Enum):
 
 # Permisos que tiene cada rol base por defecto
 PERMISOS_BASE: dict[Rol, set[Permiso]] = {
-    Rol.jefe: set(Permiso),  # todo
+    Rol.superusuario: {Permiso.ver_superadmin},
+    Rol.jefe: {p for p in Permiso if p != Permiso.ver_superadmin},
     Rol.encargado: {
         Permiso.ver_usuarios,
         Permiso.ver_kpi,
@@ -55,7 +59,6 @@ PERMISOS_BASE: dict[Rol, set[Permiso]] = {
         Permiso.crear_eventos,
         Permiso.cambiar_estado,
         Permiso.gestionar_compromisos,
-        Permiso.exportar_csv,
     },
 }
 

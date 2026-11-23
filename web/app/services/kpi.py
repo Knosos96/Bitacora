@@ -7,6 +7,7 @@ import uuid
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+from fastapi import HTTPException
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
@@ -14,8 +15,8 @@ from app.core.config import settings
 from app.core.enums import Estado, EstadoCompromiso, Tipo
 from app.services.estados import ABIERTOS
 from app.models import Area, Compromiso, Evento, Usuario
-from app.services.eventos import con_relaciones as _con_relaciones
-from app.schemas import Indicador
+from app.services.eventos import a_salida, compromiso_a_salida, con_relaciones as _con_relaciones, hoy_en_zona
+from app.schemas import CompromisoPendienteOut, Indicador, KpiListaOut, TableroOut
 
 NOMBRES = {
     "K1": "Volumen por tipo",
@@ -247,3 +248,48 @@ def lista_de(db: Session, kid: str, desde: date, hasta: date, hoy: date, clave: 
     if kid == "K12":
         return eventos(*r, Evento.tipo == Tipo.incidencia), [], None
     raise KeyError(kid)
+
+
+def rango_fechas(desde: date | None, hasta: date | None) -> tuple[date, date]:
+    if desde is None and hasta is None:
+        return semana_de(hoy_en_zona())
+    desde = desde or hasta
+    hasta = hasta or desde
+    if desde > hasta:
+        raise HTTPException(400, "'desde' no puede ser posterior a 'hasta'")
+    if (hasta - desde).days > 366:
+        raise HTTPException(400, "El rango máximo es de 366 días")
+    return desde, hasta
+
+
+def obtener_tablero(db: Session, desde: date | None = None, hasta: date | None = None) -> TableroOut:
+    d, h = rango_fechas(desde, hasta)
+    ahora = datetime.now(timezone.utc)
+    return TableroOut(desde=d, hasta=h, generado_en=ahora, indicadores=calcular(db, d, h, hoy_en_zona(), ahora))
+
+
+def obtener_lista_indicador(
+    db: Session, kid: str, desde: date | None = None, hasta: date | None = None, clave: str | None = None,
+) -> KpiListaOut:
+    kid = kid.upper()
+    if kid not in NOMBRES:
+        raise HTTPException(404, "Indicador desconocido")
+    d, h = rango_fechas(desde, hasta)
+    try:
+        eventos, comps, vacio = lista_de(db, kid, d, h, hoy_en_zona(), clave)
+    except (ValueError, KeyError):
+        raise HTTPException(400, "Subgrupo no válido para este indicador")
+    return KpiListaOut(
+        id=kid,
+        nombre=NOMBRES[kid],
+        texto_vacio=vacio,
+        eventos=[a_salida(e) for e in eventos],
+        compromisos=[
+            CompromisoPendienteOut(
+                **compromiso_a_salida(c, c.evento.folio).model_dump(),
+                evento_titulo=c.evento.titulo,
+                evento_tipo=c.evento.tipo,
+            )
+            for c in comps
+        ],
+    )

@@ -32,9 +32,12 @@ def _raiz(palabra: str) -> str:
     return palabra
 
 
+MAX_TERMINOS = 20
+
+
 def terminos(consulta: str) -> list[str]:
     palabras = re.findall(r"\w+", normalizar(consulta))
-    return [_raiz(p) for p in palabras if p]
+    return [_raiz(p) for p in palabras if p][:MAX_TERMINOS]
 
 
 def es_folio(consulta: str) -> bool:

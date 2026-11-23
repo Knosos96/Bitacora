@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.enums import Permiso
 from app.models import RolPersonalizado, Usuario
 from app.schemas import RolPersonalizadoIn, RolPersonalizadoPatch
+from app.services.historial import registrar_actividad, sincronizar_cuenta
 
 DESCRIPCIONES = {
     Permiso.ver_usuarios: "Ver la lista de usuarios",
@@ -40,11 +41,12 @@ def listar_permisos() -> list[dict]:
 
 
 def crear(db: Session, datos: RolPersonalizadoIn, jefe: Usuario) -> RolPersonalizado:
-    if db.scalar(select(RolPersonalizado).where(RolPersonalizado.nombre == datos.nombre)):
+    nombre = datos.nombre.strip()
+    if db.scalar(select(RolPersonalizado).where(RolPersonalizado.nombre == nombre)):
         raise HTTPException(400, "Ya existe un rol con ese nombre")
     rol = RolPersonalizado(
-        nombre=datos.nombre,
-        descripcion=datos.descripcion or "",
+        nombre=nombre,
+        descripcion=(datos.descripcion or "").strip(),
         permisos=[p.value for p in datos.permisos],
         creado_por_id=jefe.id,
     )
@@ -58,13 +60,14 @@ def editar(db: Session, rol_id: uuid.UUID, datos: RolPersonalizadoPatch) -> RolP
     if rol is None:
         raise HTTPException(404, "Rol no encontrado")
     if datos.nombre is not None:
+        nombre = datos.nombre.strip()
         existente = db.scalar(select(RolPersonalizado).where(
-            RolPersonalizado.nombre == datos.nombre, RolPersonalizado.id != rol_id))
+            RolPersonalizado.nombre == nombre, RolPersonalizado.id != rol_id))
         if existente:
             raise HTTPException(400, "Ya existe un rol con ese nombre")
-        rol.nombre = datos.nombre
+        rol.nombre = nombre
     if datos.descripcion is not None:
-        rol.descripcion = datos.descripcion
+        rol.descripcion = datos.descripcion.strip()
     if datos.permisos is not None:
         rol.permisos = [p.value for p in datos.permisos]
     if datos.activo is not None:
@@ -79,20 +82,35 @@ def eliminar(db: Session, rol_id: uuid.UUID) -> None:
         raise HTTPException(404, "Rol no encontrado")
     for u in db.scalars(select(Usuario).where(Usuario.rol_custom_id == rol_id)).all():
         u.rol_custom_id = None
-    rol.activo = False
+    db.flush()
+    db.delete(rol)
     db.commit()
 
 
-def asignar(db: Session, usuario_id: uuid.UUID, rol_id: uuid.UUID | None) -> dict:
+def asignar(db: Session, usuario_id: uuid.UUID, rol_id: uuid.UUID | None, actor: Usuario | None = None) -> dict:
     usuario = db.get(Usuario, usuario_id)
     if usuario is None:
         raise HTTPException(404, "Usuario no encontrado")
+    nombre_rol = None
     if rol_id is not None:
         rol = db.get(RolPersonalizado, rol_id)
         if rol is None or not rol.activo:
             raise HTTPException(404, "Rol no encontrado o inactivo")
         usuario.rol_custom_id = rol_id
+        nombre_rol = rol.nombre
     else:
         usuario.rol_custom_id = None
+    db.flush()
+    sincronizar_cuenta(db, usuario)
+    if actor is not None:
+        registrar_actividad(
+            db,
+            actor,
+            accion="rol_asignado",
+            entidad="usuario",
+            entidad_id=str(usuario.id),
+            titulo=f"{usuario.nombre} ({usuario.correo})",
+            detalle=f"Rol personalizado: {nombre_rol or 'ninguno (rol base)'}",
+        )
     db.commit()
     return {"ok": True, "usuario_id": str(usuario_id), "rol_custom_id": str(rol_id) if rol_id else None}

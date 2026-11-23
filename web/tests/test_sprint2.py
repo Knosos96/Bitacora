@@ -2,11 +2,11 @@ from datetime import timedelta
 
 import pytest
 
-from app.db import get_db
-from app.enums import Rol
+from app.core.db import get_db
+from app.core.enums import Rol
 from app.models import Seguimiento, Usuario
 from app.services.eventos import hoy_en_zona
-from app.security import hashear_clave
+from app.core.security import hashear_clave
 from tests.test_sprint1 import cliente, entrar  # noqa: F401
 
 

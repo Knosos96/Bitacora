@@ -11,42 +11,30 @@
 ## Arquitectura
 
 ```
-bitacora-ti/
-├── app/              # Backend: API REST con FastAPI + PostgreSQL
-│   ├── main.py       # Punto de entrada de la API
-│   ├── models.py     # Modelos SQLAlchemy (Usuario, Evento, Seguimiento, etc.)
-│   ├── schemas.py    # Esquemas Pydantic (validación de entrada/salida)
-│   ├── routers/      # Endpoints organizados por dominio
-│   │   ├── auth.py        # Autenticación JWT
-│   │   ├── eventos.py     # CRUD de eventos, búsqueda, exportación CSV
-│   │   ├── usuarios.py    # Gestión de usuarios
-│   │   ├── areas.py       # Áreas del departamento
-│   │   ├── compromisos.py # Compromisos por evento
-│   │   ├── pendientes.py  # Vista de pendientes y vencidos
-│   │   ├── kpi.py         # Indicadores de gestión K1–K12
-│   │   ├── claves.py      # Claves API de solo lectura
-│   │   └── subtipos.py    # Administración de subtipos de eventos
-│   ├── config.py     # Configuración por variables de entorno
-│   ├── db.py         # Conexión SQLAlchemy
-│   ├── deps.py       # Dependencias (autenticación, control de roles)
-│   ├── security.py   # Hashing bcrypt + tokens JWT
-│   ├── estados.py    # Máquina de estados de eventos
-│   ├── busqueda.py   # Motor de búsqueda full-text normalizado
-│   ├── folio.py      # Generador de folios únicos (BIT-AAAA-NNNNN)
-│   ├── kpi.py        # Cálculo de indicadores K1–K12
-│   └── subtipos.py   # Catálogo de subtipos
-├── alembic/          # Migraciones de base de datos
-├── desktop/          # Aplicación de escritorio (Tkinter)
-│   ├── app.py        # Interfaz gráfica completa
-│   └── api_client.py # Cliente HTTP para la API
-├── scripts/          # Utilidades de administración
-│   ├── seed.py       # Creación del primer jefe y áreas
-│   ├── respaldo.sh   # Respaldo manual de la base de datos
-│   └── restaurar.sh  # Restauración de respaldo
-├── tests/            # Suite de pruebas automatizadas (pytest + SQLite en memoria)
-├── Dockerfile        # Imagen Docker de la API
-├── docker-compose.yml# Orquestación: db (PostgreSQL 16) + api (FastAPI)
-└── PILOTO.md         # Guía de semana piloto
+web/
+├── app/                   # Backend: API REST modular con FastAPI + PostgreSQL
+│   ├── main.py            # Punto de entrada de la API y montaje web
+│   ├── core/              # Infraestructura: config, DB, deps, enums, seguridad
+│   ├── models/            # Modelos SQLAlchemy (estructura de tablas ORM)
+│   ├── schemas/           # Esquemas Pydantic (validación y contratos de datos)
+│   ├── services/          # Funciones y lógica de negocio por dominio
+│   └── routers/           # Endpoints HTTP modulares (delegan en services/)
+├── templates/             # Plantillas HTML de la interfaz web
+│   └── index.html         # Aplicación web responsive
+├── static/                # Recursos estáticos de la versión web
+│   ├── css/app.css        # Diseño claro, amigable y responsive
+│   └── js/
+│       ├── app.js         # Enrutador y shell principal
+│       ├── services/      # Cliente HTTP para la API
+│       ├── components/    # Modales, tablas, badges y notificaciones
+│       └── views/         # Vistas modulares (hoy, detalle, pendientes, búsqueda, tablero, admin)
+├── alembic/               # Migraciones de base de datos
+├── desktop/               # Aplicación de escritorio (Tkinter)
+├── scripts/               # Utilidades de administración y respaldos
+├── tests/                 # Suite de pruebas automatizadas (pytest + SQLite en memoria)
+├── Dockerfile             # Imagen Docker de la API
+├── docker-compose.yml     # Orquestación: db (PostgreSQL 16) + api (FastAPI)
+└── PILOTO.md              # Guía de semana piloto
 ```
 
 ---

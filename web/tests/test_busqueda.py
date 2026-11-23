@@ -1,4 +1,4 @@
-from app.busqueda import fragmento, normalizar, terminos
+from app.services.busqueda import fragmento, normalizar, terminos
 from tests.test_sprint1 import cliente, entrar  # noqa: F401
 from tests.test_sprint2 import crear, equipo, manana  # noqa: F401
 

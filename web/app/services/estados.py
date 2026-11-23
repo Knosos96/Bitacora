@@ -25,10 +25,11 @@ def es_gestor(rol: Rol) -> bool:
     return rol in (Rol.encargado, Rol.jefe)
 
 
-def transicion_valida(desde: Estado, hacia: Estado, rol: Rol) -> bool:
+def transicion_valida(desde: Estado, hacia: Estado, rol: Rol, gestor: bool | None = None) -> bool:
     if hacia in TRANSICIONES[desde]:
         return True
-    if not es_gestor(rol):
+    puede_gestionar = es_gestor(rol) if gestor is None else gestor
+    if not puede_gestionar:
         return False
     # Atajo: el encargado o el jefe cierran directo desde en_proceso / en_espera (con nota).
     if hacia == Estado.cerrado and desde in CIERRE_CON_ATAJO:

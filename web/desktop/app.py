@@ -6,7 +6,7 @@ import tkinter as tk
 from datetime import date
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from app.enums import SUBTIPOS, Estado, Tipo
+from app.core.enums import SUBTIPOS, Estado, Tipo
 from desktop.api_client import ClienteApi, ErrorApi
 
 TIPOS = [t.value for t in Tipo]

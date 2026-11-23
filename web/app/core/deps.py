@@ -1,14 +1,17 @@
+import hashlib
+import secrets
 import uuid
+from dataclasses import dataclass
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.db import get_db
 from app.core.enums import PERMISOS_BASE, Permiso, Rol
-from app.models import Usuario
-from app.core.security import leer_token
+from app.core.security import huella_clave, leer_payload_token
+from app.models import ClaveApi, UsoClaveApi, Usuario
 
 bearer = HTTPBearer(auto_error=False)
 
@@ -19,12 +22,21 @@ def usuario_actual(
 ) -> Usuario:
     if cred is None:
         raise HTTPException(401, "Falta el token")
-    sub = leer_token(cred.credentials)
-    if sub is None:
+    payload = leer_payload_token(cred.credentials)
+    if payload is None:
         raise HTTPException(401, "Token inválido o vencido")
-    usuario = db.get(Usuario, uuid.UUID(sub))
+    try:
+        uid = uuid.UUID(str(payload["sub"]))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(401, "Token inválido o vencido")
+    usuario = db.scalar(
+        select(Usuario).options(joinedload(Usuario.rol_custom)).where(Usuario.id == uid)
+    )
     if usuario is None or not usuario.activo:
         raise HTTPException(401, "Usuario inactivo")
+    ver = payload.get("ver")
+    if ver is not None and ver != huella_clave(usuario.clave_hash):
+        raise HTTPException(401, "Sesión expirada por cambio de credenciales")
     return usuario
 
 
@@ -34,6 +46,10 @@ def permisos_de(usuario: Usuario) -> set[Permiso]:
     if usuario.rol_custom_id and usuario.rol_custom and usuario.rol_custom.activo:
         return {Permiso(p) for p in usuario.rol_custom.permisos if p in Permiso._value2member_map_}
     return PERMISOS_BASE.get(usuario.rol, set())
+
+
+def tiene_permiso(usuario: Usuario, *permisos: Permiso) -> bool:
+    return bool(permisos_de(usuario).intersection(permisos))
 
 
 def requiere_rol(*roles: Rol):
@@ -49,8 +65,7 @@ def requiere_permiso(*permisos: Permiso):
     """Dependencia que verifica que el usuario tenga AL MENOS UNO de los permisos indicados
     (bien por su rol base o por su rol personalizado)."""
     def dependencia(u: Usuario = Depends(usuario_actual)) -> Usuario:
-        efectivos = permisos_de(u)
-        if not efectivos.intersection(permisos):
+        if not tiene_permiso(u, *permisos):
             raise HTTPException(409, {"codigo": "sin_permiso", "detalle": "Tu rol no permite esta acción"})
         return u
 
@@ -58,15 +73,6 @@ def requiere_permiso(*permisos: Permiso):
 
 
 # ---------------------------------------------------------------- Sprint 5: clave de API
-import hashlib  # noqa: E402
-import secrets  # noqa: E402
-from dataclasses import dataclass  # noqa: E402
-
-from fastapi import Header, Request  # noqa: E402
-
-from app.models import ClaveApi, UsoClaveApi  # noqa: E402
-
-
 def hash_clave_api(clave: str) -> str:
     # La clave es aleatoria y larga (no una contraseña elegida), por eso basta un hash rápido.
     return hashlib.sha256(clave.encode()).hexdigest()

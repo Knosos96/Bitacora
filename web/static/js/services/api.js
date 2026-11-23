@@ -19,12 +19,45 @@ export class ClienteApi {
     return Boolean(this.token && this.usuario);
   }
 
+  tienePermiso(...codigos) {
+    if (!this.usuario) return false;
+    const perms = this.usuario.permisos;
+    if (Array.isArray(perms) && perms.length) {
+      return codigos.some((c) => perms.includes(c));
+    }
+    return ["encargado", "jefe"].includes(this.usuario.rol);
+  }
+
+  get puedeVerTablero() {
+    return this.tienePermiso("ver_kpi");
+  }
+
+  get puedeAdmin() {
+    return this.tienePermiso(
+      "gestionar_areas",
+      "gestionar_subtipos",
+      "ver_usuarios",
+      "crear_usuarios",
+      "editar_usuarios",
+      "gestionar_claves_api",
+      "gestionar_roles"
+    );
+  }
+
+  get puedeExportar() {
+    return this.tienePermiso("exportar_csv");
+  }
+
   get esGestor() {
-    return this.usuario && ["encargado", "jefe"].includes(this.usuario.rol);
+    return this.puedeVerTablero || this.puedeAdmin;
   }
 
   get esJefe() {
-    return this.usuario?.rol === "jefe";
+    return this.usuario?.rol === "jefe" || this.tienePermiso("gestionar_roles", "gestionar_claves_api");
+  }
+
+  get esSuperusuario() {
+    return this.usuario?.rol === "superusuario";
   }
 
   _guardarSesion(token, usuario) {
@@ -92,6 +125,7 @@ export class ClienteApi {
   }
   crearArea(nombre) { return this._pedir("POST", "/areas", { json: { nombre } }); }
   modificarArea(id, cambios) { return this._pedir("PATCH", `/areas/${id}`, { json: cambios }); }
+  eliminarArea(id) { return this._pedir("DELETE", `/areas/${id}`); }
 
   eventos(params = {}) { return this._pedir("GET", "/eventos", { params }); }
   crearEvento(datos) { return this._pedir("POST", "/eventos", { json: datos }); }
@@ -139,12 +173,17 @@ export class ClienteApi {
   activarSubtipo(tipo, nombre, activo) {
     return this._pedir("PATCH", `/subtipos/${tipo}/${encodeURIComponent(nombre)}`, { json: { activo } });
   }
+  eliminarSubtipo(tipo, nombre) {
+    return this._pedir("DELETE", `/subtipos/${tipo}/${encodeURIComponent(nombre)}`);
+  }
   usuarios() { return this._pedir("GET", "/usuarios"); }
   crearUsuario(datos) { return this._pedir("POST", "/usuarios", { json: datos }); }
   modificarUsuario(id, cambios) { return this._pedir("PATCH", `/usuarios/${id}`, { json: cambios }); }
+  eliminarUsuario(id) { return this._pedir("DELETE", `/usuarios/${id}`); }
   clavesApi() { return this._pedir("GET", "/claves-api"); }
   crearClaveApi(nombre) { return this._pedir("POST", "/claves-api", { json: { nombre } }); }
   revocarClaveApi(id) { return this._pedir("DELETE", `/claves-api/${id}`); }
+  eliminarClaveApi(id) { return this._pedir("DELETE", `/claves-api/${id}/permanente`); }
   roles(incluir_inactivos = false) {
     return this._pedir("GET", "/roles", { params: { incluir_inactivos } });
   }
@@ -153,10 +192,24 @@ export class ClienteApi {
     return this._pedir("POST", "/roles", { json: { nombre, descripcion, permisos } });
   }
   editarRol(id, cambios) { return this._pedir("PATCH", `/roles/${id}`, { json: cambios }); }
+  eliminarRol(id) { return this._pedir("DELETE", `/roles/${id}`); }
   asignarRol(usuario_id, rol_id = null) {
     const params = { usuario_id };
     if (rol_id) params.rol_id = rol_id;
     return this._pedir("POST", "/roles/asignar", { params });
+  }
+
+  /* --- Portal Superusuario --- */
+  superResumen() { return this._pedir("GET", "/superadmin/resumen"); }
+  superCuentas(params = {}) { return this._pedir("GET", "/superadmin/cuentas", { params }); }
+  superExpediente(id) { return this._pedir("GET", `/superadmin/cuentas/${id}`); }
+  superRegistros(params = {}) { return this._pedir("GET", "/superadmin/registros", { params }); }
+  superPendientes(params = {}) { return this._pedir("GET", "/superadmin/pendientes", { params }); }
+  superArchivos() { return this._pedir("GET", "/superadmin/archivos"); }
+  superActividad(params = {}) { return this._pedir("GET", "/superadmin/actividad", { params }); }
+  async superExportarCsv(params = {}) {
+    const r = await this._pedir("GET", "/superadmin/exportar", { params, raw: true });
+    return r.blob();
   }
 }
 
@@ -181,5 +234,7 @@ export function esc(s) {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
+

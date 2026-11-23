@@ -186,7 +186,7 @@ Notas **inmutables** (listener SQLAlchemy + trigger Alembic impiden UPDATE/DELET
 Una fila por campo corregido en la cabecera del evento.
 
 ### `subtipo`
-PK compuesta `(tipo, nombre)`. Solo guarda desviaciones del catálogo base en `app.enums.SUBTIPOS`.
+PK compuesta `(tipo, nombre)`. Solo guarda desviaciones del catálogo base en `app.core.enums.SUBTIPOS`.
 
 ### `clave_api` / `uso_clave_api`
 La clave en claro (`bti_…`) se muestra **una vez**; en BD solo `prefijo` + `hash`. Cada GET con `X-API-Key` inserta en `uso_clave_api` (método + ruta, sin body ni query).

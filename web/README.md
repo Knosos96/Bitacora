@@ -38,7 +38,7 @@ uvicorn app.main:app --reload
 ## Migraciones
 Ya vienen escritas: `0001` (sprint 1), `0002` (sprint 2: `seguimiento`, `compromiso` y un trigger que impide
 editar o borrar notas) `0003` (sprint 3: texto de búsqueda con índice `pg_trgm` y tabla `auditoria`;
-rellena la búsqueda de los eventos que ya existían) y `0004` (sprints 5 y 6: claves de API, su registro de uso y ajustes de subtipos). Para un cambio nuevo: edita `app/models.py` y
+rellena la búsqueda de los eventos que ya existían) y `0004` (sprints 5 y 6: claves de API, su registro de uso y ajustes de subtipos). Para un cambio nuevo: edita el módulo correspondiente en `app/models/` y
 `alembic revision --autogenerate -m "descripcion"`, revisa el archivo y `alembic upgrade head`.
 Si ya tenías una base creada con el Sprint 1 sin Alembic, bórrala (`docker compose down -v`) y empieza de nuevo.
 

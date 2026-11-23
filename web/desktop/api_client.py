@@ -9,12 +9,16 @@ class ErrorApi(Exception):
 class ClienteApi:
     def __init__(self, base_url: str, http: httpx.Client | None = None):
         # `http` permite inyectar un cliente (las pruebas usan el TestClient de FastAPI).
-        self.http = http or httpx.Client(base_url=base_url.rstrip("/") + "/api/v1", timeout=10)
+        self.http = http or httpx.Client(base_url=base_url.rstrip("/") + "/api/v1/", timeout=10)
         self.usuario: dict | None = None
+
+    def _ruta(self, ruta: str) -> str:
+        base = str(getattr(self.http, "base_url", "")).rstrip("/")
+        return ruta.lstrip("/") if base.endswith("/api/v1") else ruta
 
     def _pedir(self, metodo: str, ruta: str, **kw):
         try:
-            r = self.http.request(metodo, ruta, **kw)
+            r = self.http.request(metodo, self._ruta(ruta), **kw)
         except httpx.HTTPError as e:
             raise ErrorApi(f"No se pudo conectar con el servidor: {e}") from e
         if r.status_code >= 400:
@@ -103,7 +107,7 @@ class ClienteApi:
     def exportar_csv(self, **filtros) -> bytes:
         params = {k: v for k, v in filtros.items() if v not in (None, "", [])}
         try:
-            r = self.http.get("/eventos/exportar", params=params)
+            r = self.http.get(self._ruta("/eventos/exportar"), params=params)
         except httpx.HTTPError as e:
             raise ErrorApi(f"No se pudo conectar con el servidor: {e}") from e
         if r.status_code >= 400:
