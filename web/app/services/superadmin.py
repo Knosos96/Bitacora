@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.core.enums import Estado, EstadoCompromiso, Tipo
 from app.models import (
     ActividadBitacora,
+    Auditoria,
     Compromiso,
     CuentaHistorica,
     Evento,
@@ -22,12 +23,16 @@ from app.models import (
 )
 from app.schemas.superadmin import (
     ActividadOut,
+    AuditoriaDocOut,
+    CompromisoDocOut,
     CuentaHistoricaOut,
     ExpedienteCuentaOut,
     PendienteHistoricoCompOut,
     ReferenciaArchivoOut,
+    RegistroDetalleOut,
     RegistroHistoricoOut,
     RespaldoArchivoOut,
+    SeguimientoDocOut,
     SuperArchivosOut,
     SuperPendientesOut,
     SuperResumenOut,
@@ -88,7 +93,7 @@ def _armar_registro(
         estado=ev.estado.value,
         prioridad=ev.prioridad.value if ev.prioridad else None,
         requiere_seguimiento=ev.requiere_seguimiento,
-        area_nombre=ev.area.nombre if ev.area else None,
+        area_nombre=ev.area.nombre if ev.area else (origen.area_nombre if origen else None),
         solicitante=ev.solicitante_nombre,
         autor_original_id=autor_id,
         autor_original_nombre=autor_nombre,
@@ -348,6 +353,7 @@ def listar_pendientes(db: Session, cuenta_id: uuid.UUID | None = None) -> SuperP
                 evento_tipo=c.evento.tipo.value,
                 descripcion=c.descripcion,
                 responsable_nombre=c.responsable.nombre if c.responsable else "—",
+                responsable_estado=estados_cuentas.get(c.responsable_id, "activa") if c.responsable_id else "activa",
                 fecha_limite=c.fecha_limite,
                 vencido=c.fecha_limite < hoy,
             )
@@ -453,6 +459,120 @@ def expediente_cuenta(db: Session, cuenta_id: uuid.UUID) -> ExpedienteCuentaOut:
         pendientes=pendientes,
         actividades=actividades,
         exportaciones=exportaciones,
+    )
+
+
+def _datos_actor(cuentas_map: dict[uuid.UUID, CuentaHistorica], usuario_id: uuid.UUID, fallback_obj) -> tuple[str, str, str]:
+    c = cuentas_map.get(usuario_id)
+    if c is not None:
+        return c.nombre, c.correo, c.estado
+    if fallback_obj is not None:
+        return fallback_obj.nombre, fallback_obj.correo, ("activa" if fallback_obj.activo and fallback_obj.eliminado_en is None else "inactiva")
+    return "—", "—", "activa"
+
+
+def detalle_registro(db: Session, folio: str) -> RegistroDetalleOut:
+    sincronizar_existentes(db)
+    ev: Evento | None = None
+    try:
+        eid = uuid.UUID(folio)
+        ev = db.scalar(
+            select(Evento)
+            .options(joinedload(Evento.area), joinedload(Evento.autor), joinedload(Evento.responsable))
+            .where(Evento.id == eid)
+        )
+    except ValueError:
+        ev = db.scalar(
+            select(Evento)
+            .options(joinedload(Evento.area), joinedload(Evento.autor), joinedload(Evento.responsable))
+            .where(Evento.folio == folio.upper())
+        )
+    if ev is None:
+        raise HTTPException(404, "Registro no encontrado")
+
+    origen = db.get(EventoOrigen, ev.id)
+    cuentas_map = {c.id: c for c in db.scalars(select(CuentaHistorica)).all()}
+    estados_cuentas = {cid: c.estado for cid, c in cuentas_map.items()}
+    notas_map, comps_map = _conteos_evento(db)
+
+    notas_filas = list(
+        db.scalars(
+            select(Seguimiento)
+            .options(joinedload(Seguimiento.autor))
+            .where(Seguimiento.evento_id == ev.id)
+            .order_by(Seguimiento.creado_en.asc())
+        ).all()
+    )
+    comp_filas = list(
+        db.scalars(
+            select(Compromiso)
+            .options(joinedload(Compromiso.responsable))
+            .where(Compromiso.evento_id == ev.id)
+            .order_by(Compromiso.fecha_limite.asc())
+        ).all()
+    )
+    aud_filas = list(
+        db.scalars(
+            select(Auditoria)
+            .options(joinedload(Auditoria.usuario))
+            .where(Auditoria.evento_id == ev.id)
+            .order_by(Auditoria.creado_en.asc())
+        ).all()
+    )
+
+    notas = []
+    for n in notas_filas:
+        nombre, correo, estado_cuenta = _datos_actor(cuentas_map, n.autor_id, n.autor)
+        notas.append(SeguimientoDocOut(
+            id=n.id,
+            autor_id=n.autor_id,
+            autor_nombre=nombre,
+            autor_correo=correo,
+            autor_estado=estado_cuenta,
+            nota=n.nota,
+            estado_anterior=n.estado_anterior.value if n.estado_anterior else None,
+            estado_nuevo=n.estado_nuevo.value if n.estado_nuevo else None,
+            creado_en=n.creado_en,
+        ))
+
+    hoy = hoy_en_zona()
+    compromisos = []
+    for c in comp_filas:
+        nombre, correo, estado_cuenta = _datos_actor(cuentas_map, c.responsable_id, c.responsable)
+        compromisos.append(CompromisoDocOut(
+            id=c.id,
+            descripcion=c.descripcion,
+            responsable_id=c.responsable_id,
+            responsable_nombre=nombre,
+            responsable_correo=correo,
+            responsable_estado=estado_cuenta,
+            fecha_limite=c.fecha_limite,
+            estado=c.estado.value,
+            vencido=(c.estado == EstadoCompromiso.pendiente and c.fecha_limite < hoy),
+            cumplido_en=c.cumplido_en,
+            creado_en=c.creado_en,
+        ))
+
+    auditoria = []
+    for a in aud_filas:
+        nombre, correo, estado_cuenta = _datos_actor(cuentas_map, a.usuario_id, a.usuario)
+        auditoria.append(AuditoriaDocOut(
+            id=a.id,
+            campo=a.campo,
+            valor_anterior=a.valor_anterior,
+            valor_nuevo=a.valor_nuevo,
+            usuario_id=a.usuario_id,
+            usuario_nombre=nombre,
+            usuario_correo=correo,
+            usuario_estado=estado_cuenta,
+            creado_en=a.creado_en,
+        ))
+
+    return RegistroDetalleOut(
+        registro=_armar_registro(ev, origen, estados_cuentas, notas_map, comps_map),
+        notas=notas,
+        compromisos=compromisos,
+        auditoria=auditoria,
     )
 
 

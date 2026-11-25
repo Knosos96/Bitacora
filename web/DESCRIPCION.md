@@ -22,12 +22,19 @@ web/
 ├── templates/             # Plantillas HTML de la interfaz web
 │   └── index.html         # Aplicación web responsive
 ├── static/                # Recursos estáticos de la versión web
-│   ├── css/app.css        # Diseño claro, amigable y responsive
+│   ├── img/               # Identidad visual (logo-zgroup.png)
+│   ├── css/               # Estilos modulares por capas (ITCSS)
+│   │   ├── app.css        # Punto de entrada (@import ordenado)
+│   │   ├── base/          # tokens.css, reset.css, animations.css
+│   │   ├── layout/        # brand.css, shell.css, grid.css
+│   │   ├── components/    # buttons, forms, panels, tables, badges, modal, toast
+│   │   ├── views/         # login.css, tablero.css, superadmin.css
+│   │   └── responsive/    # breakpoints.css, print.css
 │   └── js/
 │       ├── app.js         # Enrutador y shell principal
 │       ├── services/      # Cliente HTTP para la API
 │       ├── components/    # Modales, tablas, badges y notificaciones
-│       └── views/         # Vistas modulares (hoy, detalle, pendientes, búsqueda, tablero, admin)
+│       └── views/         # Vistas modulares (hoy, detalle, pendientes, búsqueda, tablero, admin, superadmin)
 ├── alembic/               # Migraciones de base de datos
 ├── desktop/               # Aplicación de escritorio (Tkinter)
 ├── scripts/               # Utilidades de administración y respaldos

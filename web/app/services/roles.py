@@ -89,7 +89,7 @@ def eliminar(db: Session, rol_id: uuid.UUID) -> None:
 
 def asignar(db: Session, usuario_id: uuid.UUID, rol_id: uuid.UUID | None, actor: Usuario | None = None) -> dict:
     usuario = db.get(Usuario, usuario_id)
-    if usuario is None:
+    if usuario is None or usuario.eliminado_en is not None:
         raise HTTPException(404, "Usuario no encontrado")
     nombre_rol = None
     if rol_id is not None:

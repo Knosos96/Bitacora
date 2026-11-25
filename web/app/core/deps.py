@@ -32,7 +32,7 @@ def usuario_actual(
     usuario = db.scalar(
         select(Usuario).options(joinedload(Usuario.rol_custom)).where(Usuario.id == uid)
     )
-    if usuario is None or not usuario.activo:
+    if usuario is None or not usuario.activo or usuario.eliminado_en is not None:
         raise HTTPException(401, "Usuario inactivo")
     ver = payload.get("ver")
     if ver is not None and ver != huella_clave(usuario.clave_hash):

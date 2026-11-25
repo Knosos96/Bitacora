@@ -116,3 +116,86 @@ def test_historial_completo_preservado_tras_eliminar_cuenta(equipo):
     for sec in ("cuentas", "registros", "actividad"):
         r_csv = c.get(f"/api/v1/superadmin/exportar?seccion={sec}", headers=h_super)
         assert r_csv.status_code == 200 and r_csv.content.startswith(b"\xef\xbb\xbf")
+
+
+def test_eliminacion_logica_preserva_atribucion_sin_cascada(equipo):
+    c = equipo
+    h_super = _con_super(c)
+    jefe = entrar(c, "jefe@x.com")
+
+    # Área y operador que luego serán eliminados
+    area_r = c.post("/api/v1/areas", headers=jefe, json={"nombre": "Redes Legado"})
+    assert area_r.status_code == 201
+    area_id = area_r.json()["id"]
+
+    op_r = c.post("/api/v1/usuarios", headers=jefe, json={
+        "nombre": "Ana Auditora",
+        "correo": "ana@x.com",
+        "clave": "ClaveSegura1",
+        "rol": "encargado",
+    })
+    assert op_r.status_code == 201
+    op_id = op_r.json()["id"]
+    h_ana = {"Authorization": f"Bearer {c.post('/api/v1/auth/login', json={'correo': 'ana@x.com', 'clave': 'ClaveSegura1'}).json()['token']}"}
+
+    inc = crear(
+        c, h_ana,
+        tipo="incidencia",
+        subtipo="falla",
+        titulo="Corte firewall perimetral",
+        descripcion="Registro completo antes de eliminar cuenta y área.",
+        area_id=area_id,
+    )
+    folio = inc["folio"]
+    assert c.patch(f"/api/v1/eventos/{folio}", headers=h_ana, json={"titulo": "Corte firewall principal"}).status_code == 200
+    assert c.post(f"/api/v1/eventos/{folio}/seguimientos", headers=h_ana, json={"nota": "Nota original de Ana."}).status_code == 201
+    assert c.post(f"/api/v1/eventos/{folio}/compromisos", headers=h_ana, json={
+        "descripcion": "Revisar reglas NAT", "fecha_limite": manana()
+    }).status_code == 201
+
+    # Jefe elimina el área y elimina la cuenta de Ana
+    assert c.delete(f"/api/v1/areas/{area_id}", headers=jefe).status_code == 204
+    assert c.delete(f"/api/v1/usuarios/{op_id}", headers=jefe).status_code == 204
+
+    # La cuenta eliminada no puede iniciar sesión ni aparece en la lista operativa ni tiene token válido
+    assert c.post("/api/v1/auth/login", json={"correo": "ana@x.com", "clave": "ClaveSegura1"}).status_code == 401
+    assert c.get("/api/v1/auth/yo", headers=h_ana).status_code == 401
+    assert all(u["id"] != op_id for u in c.get("/api/v1/usuarios", headers=jefe).json())
+
+    # Superusuario ve la ficha documental intacta sin reasignar autor/nota/compromiso/auditoría/área
+    det_r = c.get(f"/api/v1/superadmin/registros/{folio}", headers=h_super)
+    assert det_r.status_code == 200, det_r.text
+    det = det_r.json()
+    assert det["registro"]["autor_original_nombre"] == "Ana Auditora"
+    assert det["registro"]["autor_original_estado"] == "eliminada"
+    assert det["registro"]["responsable_original_nombre"] == "Ana Auditora"
+    assert det["registro"]["area_nombre"] == "Redes Legado"
+    assert det["notas"][0]["autor_nombre"] == "Ana Auditora"
+    assert det["notas"][0]["autor_estado"] == "eliminada"
+    assert det["compromisos"][0]["responsable_nombre"] == "Ana Auditora"
+    assert det["compromisos"][0]["responsable_estado"] == "eliminada"
+    assert det["auditoria"][0]["usuario_nombre"] == "Ana Auditora"
+    assert det["auditoria"][0]["usuario_estado"] == "eliminada"
+
+    # Pendientes globales preservan al responsable original
+    pend = c.get("/api/v1/superadmin/pendientes", headers=h_super).json()
+    comp_p = next(x for x in pend["compromisos"] if x["evento_folio"] == folio)
+    assert comp_p["responsable_nombre"] == "Ana Auditora"
+    assert comp_p["responsable_estado"] == "eliminada"
+
+    # Recrear una cuenta con el mismo correo funciona sin colisionar ni borrar el historial previo
+    recreado = c.post("/api/v1/usuarios", headers=jefe, json={
+        "nombre": "Ana Nueva",
+        "correo": "ana@x.com",
+        "clave": "ClaveSegura2",
+        "rol": "asistente",
+    })
+    assert recreado.status_code == 201, recreado.text
+    nuevo_id = recreado.json()["id"]
+    assert nuevo_id != op_id
+
+    cuentas = c.get("/api/v1/superadmin/cuentas", headers=h_super).json()
+    viejas = [x for x in cuentas if x["id"] == op_id]
+    nuevas = [x for x in cuentas if x["id"] == nuevo_id]
+    assert viejas[0]["correo"] == "ana@x.com" and viejas[0]["estado"] == "eliminada"
+    assert nuevas[0]["correo"] == "ana@x.com" and nuevas[0]["estado"] == "activa"

@@ -1,0 +1,86 @@
+/* ==========================================================================
+   Vista Tablero de Indicadores KPI
+   ========================================================================== */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
+  gap: 0.9rem;
+}
+
+.kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-top: 3px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  box-shadow: var(--shadow-xs);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--accent-border);
+  border-top-color: var(--accent);
+}
+
+.kpi-card.kpi-stock {
+  border-top-color: var(--teal);
+}
+
+.kpi-card.kpi-alert {
+  border-top-color: var(--danger);
+}
+
+.kpi-card .kpi-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.kpi-card .id {
+  font-family: var(--mono);
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+}
+
+.kpi-card.kpi-stock .id {
+  color: var(--teal);
+  background: var(--teal-soft);
+}
+
+.kpi-card.kpi-alert .id {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.kpi-card .kpi-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-secondary);
+  margin-top: 0.25rem;
+}
+
+.kpi-card .val {
+  font-size: 1.55rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  margin: 0.2rem 0;
+}
+
+.kpi-card .det {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.4;
+}

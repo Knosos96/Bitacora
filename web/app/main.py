@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
-from app.core.db import Base, engine
+from app.core.db import asegurar_esquema_sqlite
 from app.routers import ALL_ROUTERS
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -53,7 +53,7 @@ for router in ALL_ROUTERS:
 
 
 if settings.database_url.startswith("sqlite:///") and settings.database_url != "sqlite://":
-    Base.metadata.create_all(bind=engine)
+    asegurar_esquema_sqlite()
 
 
 @app.get("/api/v1/salud", tags=["salud"])

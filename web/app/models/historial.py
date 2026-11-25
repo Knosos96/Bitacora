@@ -41,6 +41,7 @@ class EventoOrigen(Base):
     responsable_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, index=True)
     responsable_nombre: Mapped[str | None] = mapped_column(String(120))
     responsable_correo: Mapped[str | None] = mapped_column(String(255))
+    area_nombre: Mapped[str | None] = mapped_column(String(120))
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
 
 

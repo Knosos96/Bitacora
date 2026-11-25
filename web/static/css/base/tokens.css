@@ -1,0 +1,56 @@
+/* ==========================================================================
+   Design Tokens — Paleta clara y amigable, sombras, radios y tipografía
+   ========================================================================== */
+
+:root {
+  /* Paleta de fondos y superficies */
+  --bg: #f4f7fb;
+  --bg-subtle: #edf3fa;
+  --surface: #ffffff;
+  --surface-soft: #f8fafc;
+  --surface-hover: #f1f6fd;
+
+  /* Texto */
+  --ink: #0f172a;
+  --ink-secondary: #334155;
+  --muted: #64748b;
+
+  /* Bordes y líneas */
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+
+  /* Acentos */
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-soft: #eff6ff;
+  --accent-border: #bfdbfe;
+
+  --teal: #0891b2;
+  --teal-soft: #ecfeff;
+
+  --ok: #059669;
+  --ok-soft: #ecfdf5;
+  --ok-border: #a7f3d0;
+
+  --warn: #d97706;
+  --warn-soft: #fffbeb;
+  --warn-border: #fde68a;
+
+  --danger: #dc2626;
+  --danger-hover: #b91c1c;
+  --danger-soft: #fef2f2;
+  --danger-border: #fecaca;
+
+  /* Sombras */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-sm: 0 4px 12px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 12px 32px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 24px 48px rgba(15, 23, 42, 0.14), 0 4px 12px rgba(15, 23, 42, 0.06);
+
+  /* Geometría y tipografía */
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 18px;
+  --font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}

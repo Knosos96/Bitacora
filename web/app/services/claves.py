@@ -53,8 +53,18 @@ def eliminar(db: Session, clave_id: uuid.UUID, actor: Usuario | None = None) -> 
     if c is None:
         raise HTTPException(404, "Clave no encontrada")
     nombre = c.nombre
+    prefijo = c.prefijo
+    usos = db.scalar(select(func.count()).select_from(UsoClaveApi).where(UsoClaveApi.clave_id == clave_id)) or 0
     db.execute(delete(UsoClaveApi).where(UsoClaveApi.clave_id == clave_id))
     if actor is not None:
-        registrar_actividad(db, actor, "clave_api_eliminada", "clave_api", str(clave_id), titulo=nombre)
+        registrar_actividad(
+            db,
+            actor,
+            "clave_api_eliminada",
+            "clave_api",
+            str(clave_id),
+            titulo=nombre,
+            detalle=f"Prefijo: {prefijo} · Usos históricos registrados: {usos}",
+        )
     db.delete(c)
     db.commit()

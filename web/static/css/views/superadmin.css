@@ -1,0 +1,127 @@
+/* ==========================================================================
+   Portal Exclusivo de Superusuario (Auditoría y Documentación)
+   ========================================================================== */
+
+body.mode-superadmin {
+  --bg: #f1f5f9;
+  --accent: #163a6b;
+  --accent-hover: #0f294a;
+  --accent-soft: #e8eff8;
+  --accent-border: #bfcfe6;
+  background:
+    radial-gradient(900px 420px at 0% -5%, rgba(22, 58, 107, 0.09) 0%, transparent 60%),
+    radial-gradient(800px 380px at 100% 0%, rgba(8, 145, 178, 0.08) 0%, transparent 55%),
+    var(--bg);
+}
+
+body.mode-superadmin .topbar {
+  border-bottom: 2px solid #163a6b;
+  background: rgba(255, 255, 255, 0.96);
+}
+
+body.mode-superadmin .contenido {
+  width: min(1320px, 100%);
+}
+
+.super-mode-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #163a6b;
+  background: #e8eff8;
+  border: 1px solid #bfcfe6;
+  border-radius: 999px;
+  padding: 0.22rem 0.65rem;
+  margin-left: 0.55rem;
+  white-space: nowrap;
+}
+
+.super-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+  background: linear-gradient(135deg, #163a6b 0%, #1e4d8c 100%);
+  color: #ffffff;
+  border-radius: var(--radius);
+  padding: 1.25rem 1.45rem;
+  margin-bottom: 1.25rem;
+  box-shadow: var(--shadow-md);
+}
+
+.super-banner h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.super-banner p {
+  margin: 0.25rem 0 0;
+  font-size: 0.88rem;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.super-banner .btn {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #ffffff;
+}
+
+.super-banner .btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.timeline-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.85rem;
+  padding: 0.85rem 1rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 10px;
+}
+
+.timeline-time {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-top: 0.15rem;
+}
+
+.timeline-body h4 {
+  margin: 0 0 0.2rem;
+  font-size: 0.93rem;
+  color: var(--ink);
+}
+
+.timeline-meta {
+  font-size: 0.82rem;
+  color: var(--ink-secondary);
+}
+
+.timeline-detail {
+  margin: 0.25rem 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+  word-break: break-word;
+}
+
+.doc-section {
+  margin-top: 1.15rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}

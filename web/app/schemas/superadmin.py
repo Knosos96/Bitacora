@@ -86,6 +86,7 @@ class PendienteHistoricoCompOut(BaseModel):
     evento_tipo: str
     descripcion: str
     responsable_nombre: str
+    responsable_estado: str = "activa"
     fecha_limite: date
     vencido: bool
 
@@ -124,3 +125,48 @@ class ExpedienteCuentaOut(BaseModel):
     pendientes: SuperPendientesOut
     actividades: list[ActividadOut]
     exportaciones: list[ActividadOut]
+
+
+class SeguimientoDocOut(BaseModel):
+    id: uuid.UUID
+    autor_id: uuid.UUID
+    autor_nombre: str
+    autor_correo: str
+    autor_estado: str
+    nota: str
+    estado_anterior: str | None
+    estado_nuevo: str | None
+    creado_en: datetime
+
+
+class CompromisoDocOut(BaseModel):
+    id: uuid.UUID
+    descripcion: str
+    responsable_id: uuid.UUID
+    responsable_nombre: str
+    responsable_correo: str
+    responsable_estado: str
+    fecha_limite: date
+    estado: str
+    vencido: bool = False
+    cumplido_en: datetime | None
+    creado_en: datetime
+
+
+class AuditoriaDocOut(BaseModel):
+    id: uuid.UUID
+    campo: str
+    valor_anterior: str | None
+    valor_nuevo: str | None
+    usuario_id: uuid.UUID
+    usuario_nombre: str
+    usuario_correo: str
+    usuario_estado: str
+    creado_en: datetime
+
+
+class RegistroDetalleOut(BaseModel):
+    registro: RegistroHistoricoOut
+    notas: list[SeguimientoDocOut]
+    compromisos: list[CompromisoDocOut]
+    auditoria: list[AuditoriaDocOut]

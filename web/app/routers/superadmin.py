@@ -13,6 +13,7 @@ from app.schemas.superadmin import (
     ActividadOut,
     CuentaHistoricaOut,
     ExpedienteCuentaOut,
+    RegistroDetalleOut,
     RegistroHistoricoOut,
     SuperArchivosOut,
     SuperPendientesOut,
@@ -62,6 +63,15 @@ def registros(
     _: Usuario = Depends(requiere_rol(Rol.superusuario)),
 ):
     return svc.listar_registros(db, cuenta_id=cuenta_id, tipo=tipo, estado=estado, desde=desde, hasta=hasta, q=q)
+
+
+@router.get("/registros/{folio}", response_model=RegistroDetalleOut)
+def registro_detalle(
+    folio: str,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(requiere_rol(Rol.superusuario)),
+):
+    return svc.detalle_registro(db, folio)
 
 
 @router.get("/pendientes", response_model=SuperPendientesOut)

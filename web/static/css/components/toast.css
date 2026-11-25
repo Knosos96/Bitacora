@@ -1,0 +1,27 @@
+/* ==========================================================================
+   Notificaciones flotantes (Toast)
+   ========================================================================== */
+
+.toast {
+  position: fixed;
+  bottom: 1.35rem;
+  right: 1.35rem;
+  max-width: min(420px, calc(100vw - 2rem));
+  background: var(--ink);
+  color: #ffffff;
+  padding: 0.8rem 1.1rem;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  box-shadow: var(--shadow-lg);
+  z-index: 90;
+  animation: rise 0.22s ease both;
+}
+
+.toast.ok {
+  background: #065f46;
+}
+
+.toast.error {
+  background: #991b1b;
+}

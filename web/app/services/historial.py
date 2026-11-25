@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.models import (
     ActividadBitacora,
+    Area,
     CuentaHistorica,
     Evento,
     EventoOrigen,
@@ -14,7 +15,7 @@ from app.models import (
 
 def sincronizar_cuenta(db: Session, u: Usuario, estado: str | None = None) -> CuentaHistorica:
     ahora = _ahora()
-    est = estado or ("activa" if u.activo else "inactiva")
+    est = estado or ("eliminada" if u.eliminado_en is not None else ("activa" if u.activo else "inactiva"))
     rol_custom_nombre = u.rol_custom.nombre if getattr(u, "rol_custom", None) else None
     hist = db.get(CuentaHistorica, u.id)
     if hist is None:
@@ -27,11 +28,14 @@ def sincronizar_cuenta(db: Session, u: Usuario, estado: str | None = None) -> Cu
             estado=est,
             creado_en=u.creado_en or ahora,
             actualizado_en=ahora,
+            eliminado_en=u.eliminado_en,
         )
         db.add(hist)
     else:
         hist.nombre = u.nombre
-        hist.correo = u.correo
+        # No sobrescribir el correo original si la cuenta ya fue eliminada y su correo se desambiguó
+        if est != "eliminada" and "#del#" not in u.correo:
+            hist.correo = u.correo
         hist.rol = u.rol.value if hasattr(u.rol, "value") else str(u.rol)
         hist.rol_custom_nombre = rol_custom_nombre
         hist.estado = est
@@ -41,7 +45,7 @@ def sincronizar_cuenta(db: Session, u: Usuario, estado: str | None = None) -> Cu
 
 def marcar_cuenta_eliminada(db: Session, u: Usuario, por: Usuario) -> None:
     hist = sincronizar_cuenta(db, u, estado="eliminada")
-    ahora = _ahora()
+    ahora = u.eliminado_en or _ahora()
     hist.eliminado_en = ahora
     hist.actualizado_en = ahora
     hist.eliminado_por_id = por.id
@@ -54,7 +58,9 @@ def registrar_evento_origen(
     evento: Evento,
     autor: Usuario,
     responsable: Usuario | None = None,
+    area_nombre: str | None = None,
 ) -> EventoOrigen:
+    area_resuelta = area_nombre or (evento.area.nombre if getattr(evento, "area", None) else None)
     origen = db.get(EventoOrigen, evento.id)
     if origen is None:
         origen = EventoOrigen(
@@ -65,31 +71,46 @@ def registrar_evento_origen(
             responsable_id=responsable.id if responsable else None,
             responsable_nombre=responsable.nombre if responsable else None,
             responsable_correo=responsable.correo if responsable else None,
+            area_nombre=area_resuelta,
             creado_en=evento.creado_en or _ahora(),
         )
         db.add(origen)
-    elif responsable is not None:
-        origen.responsable_id = responsable.id
-        origen.responsable_nombre = responsable.nombre
-        origen.responsable_correo = responsable.correo
-    elif evento.responsable_id is None:
-        origen.responsable_id = None
-        origen.responsable_nombre = None
-        origen.responsable_correo = None
+    else:
+        if area_resuelta is not None:
+            origen.area_nombre = area_resuelta
+        if responsable is not None:
+            origen.responsable_id = responsable.id
+            origen.responsable_nombre = responsable.nombre
+            origen.responsable_correo = responsable.correo
+        elif evento.responsable_id is None:
+            origen.responsable_id = None
+            origen.responsable_nombre = None
+            origen.responsable_correo = None
     return origen
 
 
 def asegurar_respaldo_eventos_usuario(db: Session, u: Usuario) -> None:
-    """Antes de borrar un Usuario, garantiza que todos sus eventos conserven su identidad original."""
+    """Garantiza que todos los eventos ligados a la cuenta conserven su snapshot histórico."""
     eventos = db.scalars(
         select(Evento)
-        .options(joinedload(Evento.autor), joinedload(Evento.responsable))
+        .options(joinedload(Evento.autor), joinedload(Evento.responsable), joinedload(Evento.area))
         .where((Evento.autor_id == u.id) | (Evento.responsable_id == u.id))
     ).unique().all()
     for ev in eventos:
         origen = db.get(EventoOrigen, ev.id)
         if origen is None:
             registrar_evento_origen(db, ev, ev.autor, ev.responsable)
+
+
+def asegurar_respaldo_area_eventos(db: Session, area: Area) -> None:
+    """Preserva el nombre del área en EventoOrigen antes de desvincular un área eliminada."""
+    eventos = db.scalars(
+        select(Evento)
+        .options(joinedload(Evento.autor), joinedload(Evento.responsable))
+        .where(Evento.area_id == area.id)
+    ).unique().all()
+    for ev in eventos:
+        registrar_evento_origen(db, ev, ev.autor, ev.responsable, area_nombre=area.nombre)
 
 
 def registrar_actividad(
@@ -118,7 +139,7 @@ def registrar_actividad(
 
 
 def sincronizar_existentes(db: Session) -> None:
-    """Rellena CuentaHistorica y EventoOrigen para registros creados antes del módulo de historial."""
+    """Rellena CuentaHistorica y EventoOrigen para registros existentes."""
     usuarios = db.scalars(select(Usuario).options(joinedload(Usuario.rol_custom))).all()
     existentes_cuentas = set(db.scalars(select(CuentaHistorica.id)).all())
     hubo = False
@@ -129,7 +150,7 @@ def sincronizar_existentes(db: Session) -> None:
 
     existentes_origen = set(db.scalars(select(EventoOrigen.evento_id)).all())
     eventos = db.scalars(
-        select(Evento).options(joinedload(Evento.autor), joinedload(Evento.responsable))
+        select(Evento).options(joinedload(Evento.autor), joinedload(Evento.responsable), joinedload(Evento.area))
     ).unique().all()
     for ev in eventos:
         if ev.id not in existentes_origen:

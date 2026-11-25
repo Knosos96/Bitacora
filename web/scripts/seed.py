@@ -6,7 +6,7 @@ import sys
 from sqlalchemy import select
 
 from app.core.config import settings
-from app.core.db import Base, SessionLocal, engine
+from app.core.db import SessionLocal, asegurar_esquema_sqlite
 from app.core.enums import Rol
 from app.core.security import hashear_clave
 from app.models import Area, Usuario
@@ -16,8 +16,7 @@ AREAS = ["Desarrollo TI", "Contabilidad", "Operaciones", "Mantenimiento", "Recur
 
 
 def main(correo: str, nombre: str, clave: str):
-    if settings.database_url.startswith("sqlite"):
-        Base.metadata.create_all(engine)
+    asegurar_esquema_sqlite()
     db = SessionLocal()
     try:
         if not db.scalar(select(Usuario).where(Usuario.correo == correo.lower())):

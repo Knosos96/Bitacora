@@ -1,0 +1,73 @@
+/* ==========================================================================
+   Identidad de marca (Logo ZGROUP)
+   ========================================================================== */
+
+.brand {
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0;
+}
+
+.brand-sub {
+  margin: 0.25rem 0 0;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.brand-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+}
+
+.logo-login {
+  display: block;
+  width: min(230px, 78%);
+  height: auto;
+  margin: 0 auto;
+  object-fit: contain;
+}
+
+.login-brand-meta {
+  text-align: center;
+  margin-top: 0.75rem;
+}
+
+.logo-topbar {
+  height: 34px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.brand-divider {
+  width: 1px;
+  height: 22px;
+  background: var(--line-strong);
+  flex-shrink: 0;
+}
+
+.brand-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
+  text-decoration: none;
+  color: inherit;
+}
+
+.logo-footer {
+  height: 20px;
+  width: auto;
+  object-fit: contain;
+  vertical-align: middle;
+  opacity: 0.88;
+}

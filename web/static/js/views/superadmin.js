@@ -102,17 +102,19 @@ function listaActividadHtml(filas, vacio = "No hay actividad registrada.") {
 }
 
 async function verFichaDocumental(folio, api) {
-  let e;
+  let det;
   try {
-    e = await api.evento(folio);
+    det = await api.superRegistroDetalle(folio);
   } catch (ex) {
     toast(ex.message, "error");
     return;
   }
-  const regs = await api.superRegistros({ q: folio }).catch(() => []);
-  const reg = regs.find((x) => x.folio === e.folio);
-  const autorOrig = reg ? etiquetaCuenta(reg.autor_original_nombre, reg.autor_original_estado) : esc(e.autor.nombre);
-  const respOrig = reg ? etiquetaCuenta(reg.responsable_original_nombre, reg.responsable_original_estado) : esc(e.responsable?.nombre || "—");
+  const e = det.registro;
+  const notas = det.notas || [];
+  const compromisos = det.compromisos || [];
+  const auditoria = det.auditoria || [];
+  const autorOrig = etiquetaCuenta(e.autor_original_nombre, e.autor_original_estado);
+  const respOrig = etiquetaCuenta(e.responsable_original_nombre, e.responsable_original_estado);
 
   abrirModal(`
     <div class="modal-header">
@@ -145,7 +147,7 @@ async function verFichaDocumental(folio, api) {
       </div>
       <div class="meta-item">
         <div class="meta-label">Área / Solicitante</div>
-        <div class="meta-val">${esc(e.area_origen?.nombre || "—")} · ${esc(e.solicitante || "—")}</div>
+        <div class="meta-val">${esc(e.area_nombre || "—")} · ${esc(e.solicitante || "—")}</div>
       </div>
       <div class="meta-item">
         <div class="meta-label">Creado / Cerrado</div>
@@ -163,12 +165,12 @@ async function verFichaDocumental(folio, api) {
     </div>
 
     <div class="modal-section">
-      <h3>Notas de seguimiento (${(e.seguimientos || []).length})</h3>
+      <h3>Notas de seguimiento (${notas.length})</h3>
       <div class="notas-list">
-        ${(e.seguimientos || []).length ? e.seguimientos.map((n) => `
+        ${notas.length ? notas.map((n) => `
           <div class="nota-item">
             <div class="nota-head">
-              <strong>${esc(n.autor.nombre)}</strong>
+              <strong>${etiquetaCuenta(n.autor_nombre, n.autor_estado)}</strong>
               <span>${esc(fmtFecha(n.creado_en))}</span>
             </div>
             <p class="nota-text">${esc(n.nota)}</p>
@@ -177,24 +179,24 @@ async function verFichaDocumental(folio, api) {
     </div>
 
     <div class="modal-section">
-      <h3>Compromisos (${(e.compromisos || []).length})</h3>
-      ${(e.compromisos || []).length ? `<div class="table-wrap"><table class="data">
+      <h3>Compromisos (${compromisos.length})</h3>
+      ${compromisos.length ? `<div class="table-wrap"><table class="data">
         <thead><tr><th>Fecha límite</th><th>Descripción</th><th>Responsable</th><th>Estado</th></tr></thead>
-        <tbody>${e.compromisos.map((c) => `<tr>
+        <tbody>${compromisos.map((c) => `<tr>
           <td class="cell-nowrap">${esc(c.fecha_limite)}</td>
           <td>${esc(c.descripcion)}</td>
-          <td>${esc(c.responsable.nombre)}</td>
+          <td>${etiquetaCuenta(c.responsable_nombre, c.responsable_estado)}</td>
           <td>${c.vencido ? badge("VENCIDO") : badge(c.estado)}</td>
         </tr>`).join("")}</tbody></table></div>` : `<div class="empty-state">Sin compromisos.</div>`}
     </div>
 
     <div class="modal-section">
-      <h3>Auditoría de cambios (${(e.auditoria || []).length})</h3>
-      ${(e.auditoria || []).length ? `<div class="table-wrap"><table class="data">
+      <h3>Auditoría de cambios (${auditoria.length})</h3>
+      ${auditoria.length ? `<div class="table-wrap"><table class="data">
         <thead><tr><th>Fecha</th><th>Usuario</th><th>Campo</th><th>Antes</th><th>Después</th></tr></thead>
-        <tbody>${e.auditoria.map((a) => `<tr>
+        <tbody>${auditoria.map((a) => `<tr>
           <td class="cell-nowrap">${esc(fmtFecha(a.creado_en))}</td>
-          <td>${esc(a.usuario.nombre)}</td>
+          <td>${etiquetaCuenta(a.usuario_nombre, a.usuario_estado)}</td>
           <td><strong>${esc(a.campo)}</strong></td>
           <td class="muted">${esc(a.valor_anterior || "—")}</td>
           <td>${esc(a.valor_nuevo || "—")}</td>
@@ -552,7 +554,7 @@ async function renderPendientes(box, api) {
             <td class="folio-cell">${esc(c.evento_folio)}</td>
             <td>${esc(c.evento_titulo)}</td>
             <td><strong>${esc(c.descripcion)}</strong></td>
-            <td>${esc(c.responsable_nombre)}</td>
+            <td>${etiquetaCuenta(c.responsable_nombre, c.responsable_estado)}</td>
             <td>${c.vencido ? badge("VENCIDO") : badge("pendiente")}</td>
           </tr>`).join("")}</tbody></table></div>`
       : `<div class="empty-state">No hay compromisos pendientes.</div>`;

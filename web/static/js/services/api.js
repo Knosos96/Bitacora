@@ -204,6 +204,7 @@ export class ClienteApi {
   superCuentas(params = {}) { return this._pedir("GET", "/superadmin/cuentas", { params }); }
   superExpediente(id) { return this._pedir("GET", `/superadmin/cuentas/${id}`); }
   superRegistros(params = {}) { return this._pedir("GET", "/superadmin/registros", { params }); }
+  superRegistroDetalle(folio) { return this._pedir("GET", `/superadmin/registros/${encodeURIComponent(folio)}`); }
   superPendientes(params = {}) { return this._pedir("GET", "/superadmin/pendientes", { params }); }
   superArchivos() { return this._pedir("GET", "/superadmin/archivos"); }
   superActividad(params = {}) { return this._pedir("GET", "/superadmin/actividad", { params }); }

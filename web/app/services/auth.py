@@ -19,9 +19,11 @@ def login(db: Session, correo: str, clave: str, ip: str = "local") -> TokenOut:
     login_ip_limiter.verificar(llave_ip)
 
     u = db.scalar(
-        select(Usuario).options(joinedload(Usuario.rol_custom)).where(Usuario.correo == correo_norm)
+        select(Usuario)
+        .options(joinedload(Usuario.rol_custom))
+        .where(Usuario.correo == correo_norm, Usuario.eliminado_en.is_(None))
     )
-    if u is None or not u.activo or not verificar_clave(clave, u.clave_hash):
+    if u is None or not u.activo or u.eliminado_en is not None or not verificar_clave(clave, u.clave_hash):
         login_limiter.registrar_fallo(llave_cuenta)
         login_ip_limiter.registrar_fallo(llave_ip)
         raise HTTPException(401, "Correo o clave incorrectos")

@@ -9,7 +9,7 @@ from app.core.deps import tiene_permiso
 from app.core.enums import Permiso
 from app.models import Area, Evento, Usuario
 from app.schemas import AreaIn, AreaPatch
-from app.services.historial import registrar_actividad
+from app.services.historial import asegurar_respaldo_area_eventos, registrar_actividad
 
 
 def listar(db: Session, usuario: Usuario, incluir_inactivas: bool = False) -> list[Area]:
@@ -56,6 +56,7 @@ def eliminar(db: Session, area_id: uuid.UUID, actor: Usuario | None = None) -> N
     if area is None:
         raise HTTPException(404, "Área no encontrada")
     nombre = area.nombre
+    asegurar_respaldo_area_eventos(db, area)
     db.execute(update(Evento).where(Evento.area_id == area_id).values(area_id=None))
     if actor is not None:
         registrar_actividad(db, actor, "area_eliminada", "area", str(area_id), titulo=nombre)

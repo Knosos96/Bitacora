@@ -1,0 +1,181 @@
+/* ==========================================================================
+   Formularios, inputs, contraseñas con visibilidad y criterios en tiempo real
+   ========================================================================== */
+
+label, .field {
+  display: grid;
+  gap: 0.38rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--ink-secondary);
+}
+
+label.check-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+  user-select: none;
+}
+
+input:not([type="checkbox"]):not([type="radio"]),
+select,
+textarea {
+  font: inherit;
+  font-weight: 400;
+  font-size: 0.94rem;
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 0.8rem;
+  background: var(--surface);
+  min-height: 40px;
+  width: 100%;
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+input[type="checkbox"] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+  cursor: pointer;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+textarea {
+  min-height: 96px;
+  resize: vertical;
+  line-height: 1.5;
+}
+
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+input::placeholder, textarea::placeholder {
+  color: #94a3b8;
+}
+
+.alert-inline {
+  margin: 0;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.88rem;
+  font-weight: 500;
+}
+
+.alert-inline.error, .error {
+  color: var(--danger);
+}
+
+.alert-inline.error {
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+}
+
+.permisos-box {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  background: var(--surface-soft);
+  margin: 0;
+}
+
+.permisos-box legend {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--ink-secondary);
+  padding: 0 0.4rem;
+}
+
+.password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.password-wrap input {
+  padding-right: 2.75rem !important;
+}
+
+.btn-eye {
+  position: absolute;
+  right: 0.4rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  display: inline-grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.btn-eye:hover {
+  background: var(--bg-subtle);
+  color: var(--ink);
+}
+
+.criteria-list {
+  list-style: none;
+  margin: 0.25rem 0 0;
+  padding: 0.55rem 0.75rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  display: grid;
+  gap: 0.28rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+}
+
+.criteria-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+  transition: color 0.15s ease;
+}
+
+.criteria-item .crit-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line-strong);
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.65rem;
+  line-height: 1;
+  color: transparent;
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.criteria-item.is-valid {
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.criteria-item.is-valid .crit-dot {
+  background: var(--ok-soft);
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.custom-role-box {
+  padding: 0.75rem 0.85rem;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+  animation: rise 0.18s ease both;
+}

@@ -1,0 +1,179 @@
+/* ==========================================================================
+   Modales accesibles, ficha de evento e historial de notas
+   ========================================================================== */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.42);
+  backdrop-filter: blur(3px);
+  animation: fade 0.18s ease both;
+}
+
+.modal-panel {
+  position: relative;
+  width: min(820px, 100%);
+  max-height: min(92dvh, 920px);
+  overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lg);
+  padding: 1.4rem 1.5rem 1.55rem;
+  animation: rise 0.22s ease both;
+}
+
+.modal-panel.modal-sm {
+  width: min(480px, 100%);
+}
+
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding-bottom: 0.9rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.modal-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.detail-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.meta-item {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+}
+
+.meta-item .meta-label {
+  font-size: 0.73rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.meta-item .meta-val {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-top: 0.15rem;
+  word-break: break-word;
+}
+
+.ficha-body {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.ficha-body h3 {
+  margin: 0 0 0.45rem;
+  font-size: 1.05rem;
+}
+
+.ficha-body p {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--ink-secondary);
+  font-size: 0.93rem;
+  line-height: 1.55;
+}
+
+.ficha-code {
+  font-family: var(--mono);
+  background: var(--surface-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  font-size: 0.9rem;
+  word-break: break-all;
+  color: var(--ink);
+}
+
+.action-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.85rem;
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  margin-bottom: 1.15rem;
+}
+
+.action-toolbar select {
+  width: auto;
+  min-width: 185px;
+}
+
+.modal-section {
+  margin-top: 1.15rem;
+}
+
+.modal-section h3 {
+  font-size: 0.96rem;
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+  color: var(--ink);
+}
+
+.notas-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: grid;
+  gap: 0.5rem;
+  padding: 0.25rem 0;
+}
+
+.nota-item {
+  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  font-size: 0.88rem;
+}
+
+.nota-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 0.25rem;
+}
+
+.nota-head strong {
+  color: var(--ink-secondary);
+}
+
+.nota-text {
+  margin: 0;
+  white-space: pre-wrap;
+  color: var(--ink);
+}

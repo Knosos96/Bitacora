@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bitacora}
       POSTGRES_DB: ${POSTGRES_DB:-bitacora}
       TZ: UTC
-    ports: ["5432:5432"]
+    ports: ["5434:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
@@ -30,7 +30,10 @@ services:
       SEED_JEFE_CORREO: ${SEED_JEFE_CORREO:-}
       SEED_JEFE_NOMBRE: ${SEED_JEFE_NOMBRE:-}
       SEED_JEFE_CLAVE: ${SEED_JEFE_CLAVE:-}
-    ports: ["8000:8000"]
+      SEED_SUPER_CORREO: ${SEED_SUPER_CORREO:-superusuario@zgroup.com}
+      SEED_SUPER_NOMBRE: ${SEED_SUPER_NOMBRE:-Superusuario ZGROUP}
+      SEED_SUPER_CLAVE: ${SEED_SUPER_CLAVE:-SuperSegura123}
+    ports: ["8001:8000"]
 
   # Respaldo automático diario (perfil opcional): docker compose --profile respaldo up -d
   respaldo:

@@ -1,0 +1,46 @@
+/* ==========================================================================
+   Estilos de impresión / exportación documental PDF
+   ========================================================================== */
+
+@media print {
+  .topbar,
+  .aviso,
+  .app-footer,
+  .btn,
+  .filters-bar,
+  .tabs,
+  .toast {
+    display: none !important;
+  }
+
+  body,
+  body.mode-superadmin {
+    background: #ffffff !important;
+  }
+
+  .contenido {
+    width: 100% !important;
+    padding: 0 !important;
+  }
+
+  .panel,
+  .stat-card {
+    box-shadow: none !important;
+    border-color: #cbd5e1 !important;
+  }
+
+  .modal {
+    position: static !important;
+    padding: 0 !important;
+  }
+
+  .modal-backdrop {
+    display: none !important;
+  }
+
+  .modal-panel {
+    max-height: none !important;
+    box-shadow: none !important;
+    width: 100% !important;
+  }
+}

@@ -2,21 +2,13 @@
 import uuid
 
 from fastapi import HTTPException
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.deps import permisos_de
 from app.core.enums import Rol
 from app.core.security import hashear_clave
-from app.models import (
-    Auditoria,
-    ClaveApi,
-    Compromiso,
-    Evento,
-    RolPersonalizado,
-    Seguimiento,
-    Usuario,
-)
+from app.models import RolPersonalizado, Usuario, _ahora
 from app.schemas import UsuarioIn, UsuarioOut, UsuarioPatch
 from app.services.historial import (
     asegurar_respaldo_eventos_usuario,
@@ -43,8 +35,18 @@ def crear(db: Session, datos: UsuarioIn, actor: Usuario | None = None) -> Usuari
     if datos.rol == Rol.superusuario:
         raise HTTPException(409, {"codigo": "sin_permiso", "detalle": "No se pueden crear cuentas de superusuario aquí"})
     correo = datos.correo.lower()
-    if db.scalar(select(Usuario).where(Usuario.correo == correo)):
+    if db.scalar(select(Usuario).where(Usuario.correo == correo, Usuario.eliminado_en.is_(None))):
         raise HTTPException(400, "Ya existe un usuario con ese correo")
+
+    # Si hubo una cuenta eliminada históricamente con ese mismo correo, liberamos el índice único
+    # manteniendo el correo original intacto en CuentaHistorica y EventoOrigen.
+    prev_eliminado = db.scalar(
+        select(Usuario).where(Usuario.correo == correo, Usuario.eliminado_en.is_not(None))
+    )
+    if prev_eliminado is not None:
+        prev_eliminado.correo = f"{correo}#del#{prev_eliminado.id}"
+        db.flush()
+
     if datos.rol_custom_id is not None:
         rol_custom = db.get(RolPersonalizado, datos.rol_custom_id)
         if rol_custom is None or not rol_custom.activo:
@@ -79,14 +81,18 @@ def listar(db: Session) -> list[UsuarioOut]:
     usuarios = db.scalars(
         select(Usuario)
         .options(joinedload(Usuario.rol_custom))
-        .where(Usuario.rol != Rol.superusuario)
+        .where(Usuario.rol != Rol.superusuario, Usuario.eliminado_en.is_(None))
         .order_by(Usuario.nombre)
     ).all()
     return [a_salida(u) for u in usuarios]
 
 
 def modificar(db: Session, usuario_id: uuid.UUID, datos: UsuarioPatch, jefe: Usuario) -> UsuarioOut:
-    u = db.scalar(select(Usuario).where(Usuario.id == usuario_id).options(joinedload(Usuario.rol_custom)))
+    u = db.scalar(
+        select(Usuario)
+        .where(Usuario.id == usuario_id, Usuario.eliminado_en.is_(None))
+        .options(joinedload(Usuario.rol_custom))
+    )
     if u is None:
         raise HTTPException(404, "Usuario no encontrado")
     if u.rol == Rol.superusuario and jefe.rol != Rol.superusuario:
@@ -100,7 +106,11 @@ def modificar(db: Session, usuario_id: uuid.UUID, datos: UsuarioPatch, jefe: Usu
     if deja_de_ser_jefe_activo:
         otros = db.scalar(
             select(func.count()).select_from(Usuario).where(
-                Usuario.rol == Rol.jefe, Usuario.activo, Usuario.id != u.id)
+                Usuario.rol == Rol.jefe,
+                Usuario.activo,
+                Usuario.eliminado_en.is_(None),
+                Usuario.id != u.id,
+            )
         )
         if u.id == jefe.id and datos.activo is False:
             raise HTTPException(409, {"codigo": "sin_permiso", "detalle": "No puedes desactivarte a ti mismo"})
@@ -141,7 +151,13 @@ def modificar(db: Session, usuario_id: uuid.UUID, datos: UsuarioPatch, jefe: Usu
 
 
 def eliminar(db: Session, usuario_id: uuid.UUID, jefe: Usuario) -> None:
-    u = db.scalar(select(Usuario).where(Usuario.id == usuario_id).options(joinedload(Usuario.rol_custom)))
+    """Eliminación lógica sin cascada destructiva: oculta y revoca la cuenta operativa,
+    pero conserva intactos todos sus eventos, notas, compromisos y auditoría para el Superusuario."""
+    u = db.scalar(
+        select(Usuario)
+        .where(Usuario.id == usuario_id, Usuario.eliminado_en.is_(None))
+        .options(joinedload(Usuario.rol_custom))
+    )
     if u is None:
         raise HTTPException(404, "Usuario no encontrado")
     if u.rol == Rol.superusuario:
@@ -151,14 +167,18 @@ def eliminar(db: Session, usuario_id: uuid.UUID, jefe: Usuario) -> None:
     if u.rol == Rol.jefe and u.activo:
         otros = db.scalar(
             select(func.count()).select_from(Usuario).where(
-                Usuario.rol == Rol.jefe, Usuario.activo, Usuario.id != u.id
+                Usuario.rol == Rol.jefe,
+                Usuario.activo,
+                Usuario.eliminado_en.is_(None),
+                Usuario.id != u.id,
             )
         )
         if not otros:
             raise HTTPException(409, {"codigo": "ultimo_jefe", "detalle": "Debe quedar al menos un jefe activo"})
 
-    # Preserva el autor/responsable original en EventoOrigen y la cuenta en CuentaHistorica
     asegurar_respaldo_eventos_usuario(db, u)
+    u.activo = False
+    u.eliminado_en = _ahora()
     marcar_cuenta_eliminada(db, u, jefe)
     registrar_actividad(
         db,
@@ -167,17 +187,6 @@ def eliminar(db: Session, usuario_id: uuid.UUID, jefe: Usuario) -> None:
         entidad="usuario",
         entidad_id=str(u.id),
         titulo=f"{u.nombre} ({u.correo})",
-        detalle=f"Cuenta eliminada por {jefe.nombre} ({jefe.correo}); historial preservado.",
+        detalle=f"Cuenta eliminada por {jefe.nombre} ({jefe.correo}); registros, notas y compromisos preservados sin cascada.",
     )
-
-    # Reasigna FKs en tablas operativas para mantener integridad referencial
-    db.execute(update(Evento).where(Evento.responsable_id == usuario_id).values(responsable_id=None))
-    db.execute(update(Evento).where(Evento.autor_id == usuario_id).values(autor_id=jefe.id))
-    db.execute(update(Seguimiento).where(Seguimiento.autor_id == usuario_id).values(autor_id=jefe.id))
-    db.execute(update(Compromiso).where(Compromiso.responsable_id == usuario_id).values(responsable_id=jefe.id))
-    db.execute(update(Auditoria).where(Auditoria.usuario_id == usuario_id).values(usuario_id=jefe.id))
-    db.execute(update(ClaveApi).where(ClaveApi.creada_por_id == usuario_id).values(creada_por_id=jefe.id))
-    db.execute(update(RolPersonalizado).where(RolPersonalizado.creado_por_id == usuario_id).values(creado_por_id=jefe.id))
-
-    db.delete(u)
     db.commit()

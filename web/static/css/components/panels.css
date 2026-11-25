@@ -1,0 +1,97 @@
+/* ==========================================================================
+   Paneles, tarjetas de resumen (stats) y pestañas
+   ========================================================================== */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.35rem;
+  box-shadow: var(--shadow-sm);
+}
+
+.panel + .panel {
+  margin-top: 1.15rem;
+}
+
+.panel-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.panel h2, .panel h3 {
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+
+.panel h2 {
+  font-size: 1.12rem;
+}
+
+.panel h3 {
+  font-size: 1rem;
+}
+
+.stats-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 0.85rem;
+  margin-bottom: 1.15rem;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.15rem;
+  box-shadow: var(--shadow-xs);
+}
+
+.stat-card .stat-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.stat-card .stat-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  margin-top: 0.2rem;
+}
+
+.stat-card.accent {
+  border-left: 4px solid var(--accent);
+}
+
+.stat-card.warn {
+  border-left: 4px solid var(--danger);
+}
+
+.stat-card.ok {
+  border-left: 4px solid var(--ok);
+}
+
+.tabs {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button.active {
+  background: var(--accent);
+  color: #ffffff;
+  border-color: var(--accent);
+}

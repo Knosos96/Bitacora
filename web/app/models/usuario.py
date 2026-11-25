@@ -34,6 +34,7 @@ class Usuario(Base):
     clave_hash: Mapped[str] = mapped_column(String(255))
     activo: Mapped[bool] = mapped_column(Boolean, default=True)
     creado_en: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_ahora)
+    eliminado_en: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     rol_custom_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("rol_personalizado.id"), nullable=True)
 
     rol_custom: Mapped["RolPersonalizado | None"] = relationship(foreign_keys=[rol_custom_id])

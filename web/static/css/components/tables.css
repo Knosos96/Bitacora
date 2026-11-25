@@ -1,0 +1,84 @@
+/* ==========================================================================
+   Tablas de datos y estados vacíos
+   ========================================================================== */
+
+.table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+table.data {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+table.data th, table.data td {
+  text-align: left;
+  padding: 0.75rem 0.9rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+
+table.data th {
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+table.data tbody tr {
+  transition: background 0.14s ease;
+}
+
+table.data tr[data-folio] {
+  cursor: pointer;
+}
+
+table.data tr[data-folio]:hover {
+  background: var(--surface-hover);
+}
+
+table.data.admin-table tbody tr:hover {
+  background: var(--surface-soft);
+}
+
+table.data tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.folio-cell {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.cell-nowrap {
+  white-space: nowrap;
+}
+
+.cell-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--muted);
+  font-size: 0.94rem;
+  background: var(--surface-soft);
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+}

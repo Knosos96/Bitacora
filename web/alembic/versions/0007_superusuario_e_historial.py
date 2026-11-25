@@ -1,14 +1,14 @@
 """superusuario e historial permanente de cuentas y actividad
 
-Revision ID: 0006
-Revises: 0005
+Revision ID: 0007
+Revises: 0006
 Create Date: 2026-11-23
 """
 from alembic import op
 import sqlalchemy as sa
 
-revision = "0006"
-down_revision = "0005"
+revision = "0007"
+down_revision = "0006"
 branch_labels = None
 depends_on = None
 
@@ -16,8 +16,8 @@ depends_on = None
 def upgrade():
     bind = op.get_bind()
     if bind.dialect.name == "postgresql":
-        op.execute("COMMIT")
-        op.execute("ALTER TYPE rol ADD VALUE IF NOT EXISTS 'superusuario'")
+        with op.get_context().autocommit_block():
+            op.execute("ALTER TYPE rol ADD VALUE IF NOT EXISTS 'superusuario'")
 
     op.create_table(
         "cuenta_historica",

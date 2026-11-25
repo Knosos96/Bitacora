@@ -119,7 +119,7 @@ def compromiso_a_salida(c: Compromiso, folio: str) -> CompromisoOut:
 
 def usuario_activo(db: Session, usuario_id: uuid.UUID) -> bool:
     u = db.get(Usuario, usuario_id)
-    return bool(u and u.activo)
+    return bool(u and u.activo and u.eliminado_en is None)
 
 
 def nota(db: Session, e: Evento, autor: Usuario, texto: str, anterior=None, nuevo=None) -> Seguimiento:
@@ -206,7 +206,14 @@ def crear(db: Session, datos: EventoIn, usuario: Usuario) -> EventoOut:
     db.add(evento)
     db.flush()
     resp_obj = db.get(Usuario, responsable_id) if responsable_id else None
-    registrar_evento_origen(db, evento, usuario, resp_obj)
+    area_obj = db.get(Area, datos.area_id) if datos.area_id else None
+    registrar_evento_origen(
+        db,
+        evento,
+        usuario,
+        resp_obj,
+        area_nombre=area_obj.nombre if area_obj else None,
+    )
     registrar_actividad(
         db,
         usuario,

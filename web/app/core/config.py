@@ -8,7 +8,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=BASE_DIR / ".env", extra="ignore")
 
-    database_url: str = f"sqlite:///{(BASE_DIR / 'bitacora.db').as_posix()}"
+    database_url: str = "postgresql+psycopg://bitacora:bitacora@localhost:5434/bitacora"
     secret_key: str = "dev-inseguro-cambiar"
     zona_horaria: str = "America/Bogota"
     token_horas: int = 12
