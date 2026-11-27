@@ -7,19 +7,23 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
-from app.core.enums import Estado, EstadoCompromiso, Tipo
+from app.core.enums import Estado, EstadoCompromiso, Rol, Tipo
 from app.models import (
     ActividadBitacora,
     Auditoria,
+    ClaveApi,
     Compromiso,
     CuentaHistorica,
     Evento,
     EventoOrigen,
+    RolPersonalizado,
     Seguimiento,
+    UsoClaveApi,
+    Usuario,
 )
 from app.schemas.superadmin import (
     ActividadOut,
@@ -28,6 +32,9 @@ from app.schemas.superadmin import (
     CuentaHistoricaOut,
     ExpedienteCuentaOut,
     PendienteHistoricoCompOut,
+    PurgaCuentaIn,
+    PurgaCuentaOut,
+    PurgaResumenCuentaOut,
     ReferenciaArchivoOut,
     RegistroDetalleOut,
     RegistroHistoricoOut,
@@ -38,7 +45,7 @@ from app.schemas.superadmin import (
     SuperResumenOut,
 )
 from app.services.eventos import _celda, hoy_en_zona
-from app.services.historial import sincronizar_existentes
+from app.services.historial import registrar_actividad, sincronizar_existentes
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 RESPALDOS_DIR = BASE_DIR / "respaldos"
@@ -599,6 +606,44 @@ def exportar_dossier_csv(db: Session, seccion: str = "actividad", cuenta_id: uui
                 r.autor_original_nombre, r.autor_original_correo, r.autor_original_estado,
                 r.responsable_original_nombre, r.area_nombre, r.referencia, r.creado_en, r.cerrado_en,
             )])
+    elif seccion == "expediente":
+        if cuenta_id is None:
+            raise HTTPException(400, "Debes indicar cuenta_id para exportar un expediente individual")
+        exp = expediente_cuenta(db, cuenta_id)
+        c = exp.cuenta
+        w.writerow(["EXPEDIENTE INDIVIDUAL DE CUENTA"])
+        w.writerow(["id", "nombre", "correo", "rol", "rol_personalizado", "estado",
+                    "creado_en", "eliminado_en", "eliminado_por", "eventos", "incidencias", "pendientes", "actividades"])
+        w.writerow([_celda(v) for v in (
+            c.id, c.nombre, c.correo, c.rol, c.rol_custom_nombre, c.estado,
+            c.creado_en, c.eliminado_en, c.eliminado_por_nombre,
+            c.eventos_creados, c.incidencias_creadas, c.pendientes_abiertos, c.actividades_count,
+        )])
+        w.writerow([])
+        w.writerow(["REGISTROS E INCIDENCIAS DEL USUARIO"])
+        w.writerow(["folio", "fecha_hecho", "tipo", "subtipo", "titulo", "estado", "prioridad",
+                    "autor_original", "responsable_original", "area", "referencia", "creado_en", "cerrado_en"])
+        for r in exp.registros:
+            w.writerow([_celda(v) for v in (
+                r.folio, r.fecha_hecho, r.tipo, r.subtipo, r.titulo, r.estado, r.prioridad,
+                r.autor_original_nombre, r.responsable_original_nombre, r.area_nombre, r.referencia,
+                r.creado_en, r.cerrado_en,
+            )])
+        w.writerow([])
+        w.writerow(["COMPROMISOS PENDIENTES DEL USUARIO"])
+        w.writerow(["fecha_limite", "evento_folio", "evento_titulo", "descripcion", "responsable", "vencido"])
+        for cp in exp.pendientes.compromisos:
+            w.writerow([_celda(v) for v in (
+                cp.fecha_limite, cp.evento_folio, cp.evento_titulo, cp.descripcion,
+                cp.responsable_nombre, "SI" if cp.vencido else "NO",
+            )])
+        w.writerow([])
+        w.writerow(["BITACORA DE ACTIVIDAD DEL USUARIO"])
+        w.writerow(["fecha", "actor_nombre", "actor_correo", "accion", "entidad", "folio", "titulo", "detalle"])
+        for a in exp.actividades:
+            w.writerow([_celda(v) for v in (
+                a.creado_en, a.actor_nombre, a.actor_correo, a.accion, a.entidad, a.folio, a.titulo, a.detalle,
+            )])
     else:
         w.writerow(["fecha", "actor_nombre", "actor_correo", "actor_rol", "accion", "entidad", "folio", "titulo", "detalle"])
         for a in listar_actividad(db, cuenta_id=cuenta_id, limit=2000):
@@ -610,3 +655,209 @@ def exportar_dossier_csv(db: Session, seccion: str = "actividad", cuenta_id: uui
     cuerpo = ("\ufeff" + salida.getvalue()).encode("utf-8")
     nombre = f"dossier-superadmin-{seccion}-{hoy_en_zona().isoformat()}.csv"
     return cuerpo, nombre
+
+
+def _cuenta_protegida_para_purga(db: Session, cuenta: CuentaHistorica, actor: Usuario) -> bool:
+    if cuenta.id == actor.id or cuenta.rol == Rol.superusuario.value:
+        return True
+    u = db.get(Usuario, cuenta.id)
+    if u is not None and u.rol == Rol.jefe and u.activo and u.eliminado_en is None:
+        otros_jefes = db.scalar(
+            select(func.count()).select_from(Usuario).where(
+                Usuario.rol == Rol.jefe,
+                Usuario.activo,
+                Usuario.eliminado_en.is_(None),
+                Usuario.id != u.id,
+            )
+        )
+        if not otros_jefes:
+            return True
+    return False
+
+
+def resumen_purga_cuenta(db: Session, cuenta_id: uuid.UUID, actor: Usuario) -> PurgaResumenCuentaOut:
+    sincronizar_existentes(db)
+    cuenta = db.get(CuentaHistorica, cuenta_id)
+    if cuenta is None:
+        raise HTTPException(404, "Cuenta histórica no encontrada")
+
+    ev_creados_ids = select(Evento.id).where(Evento.autor_id == cuenta_id)
+    eventos_creados = db.scalar(select(func.count()).select_from(Evento).where(Evento.autor_id == cuenta_id)) or 0
+    eventos_asignados = db.scalar(
+        select(func.count()).select_from(Evento).where(Evento.responsable_id == cuenta_id, Evento.autor_id != cuenta_id)
+    ) or 0
+    notas_otros = db.scalar(
+        select(func.count()).select_from(Seguimiento).where(
+            Seguimiento.autor_id == cuenta_id, ~Seguimiento.evento_id.in_(ev_creados_ids)
+        )
+    ) or 0
+    comp_otros = db.scalar(
+        select(func.count()).select_from(Compromiso).where(
+            Compromiso.responsable_id == cuenta_id, ~Compromiso.evento_id.in_(ev_creados_ids)
+        )
+    ) or 0
+    aud_otros = db.scalar(
+        select(func.count()).select_from(Auditoria).where(
+            Auditoria.usuario_id == cuenta_id, ~Auditoria.evento_id.in_(ev_creados_ids)
+        )
+    ) or 0
+    claves_api = db.scalar(select(func.count()).select_from(ClaveApi).where(ClaveApi.creada_por_id == cuenta_id)) or 0
+    roles_creados = db.scalar(
+        select(func.count()).select_from(RolPersonalizado).where(RolPersonalizado.creado_por_id == cuenta_id)
+    ) or 0
+    actividades = db.scalar(
+        select(func.count()).select_from(ActividadBitacora).where(ActividadBitacora.actor_id == cuenta_id)
+    ) or 0
+
+    return PurgaResumenCuentaOut(
+        cuenta_id=cuenta.id,
+        nombre=cuenta.nombre,
+        correo=cuenta.correo,
+        rol=cuenta.rol,
+        estado=cuenta.estado,
+        eventos_creados=eventos_creados,
+        eventos_asignados=eventos_asignados,
+        notas_en_otros_eventos=notas_otros,
+        compromisos_en_otros_eventos=comp_otros,
+        auditorias_en_otros_eventos=aud_otros,
+        claves_api=claves_api,
+        roles_creados=roles_creados,
+        actividades=actividades,
+        es_protegida=_cuenta_protegida_para_purga(db, cuenta, actor),
+    )
+
+
+def _eliminar_seguimientos(db: Session, condicion) -> int:
+    es_pg = db.bind is not None and db.bind.dialect.name == "postgresql"
+    if es_pg:
+        db.execute(text("ALTER TABLE seguimiento DISABLE TRIGGER seguimiento_inmutable"))
+    try:
+        res = db.execute(delete(Seguimiento).where(condicion))
+        return res.rowcount or 0
+    finally:
+        if es_pg:
+            db.execute(text("ALTER TABLE seguimiento ENABLE TRIGGER seguimiento_inmutable"))
+
+
+def purgar_datos_cuenta(
+    db: Session,
+    cuenta_id: uuid.UUID,
+    datos: PurgaCuentaIn,
+    actor: Usuario,
+) -> PurgaCuentaOut:
+    """Elimina de forma permanente y selectiva los datos relacionados a una cuenta de la BD."""
+    sincronizar_existentes(db)
+    cuenta = db.get(CuentaHistorica, cuenta_id)
+    if cuenta is None:
+        raise HTTPException(404, "Cuenta histórica no encontrada")
+
+    if not any([
+        datos.eliminar_eventos_creados,
+        datos.eliminar_notas,
+        datos.eliminar_compromisos,
+        datos.eliminar_auditorias,
+        datos.eliminar_claves_api,
+        datos.eliminar_actividades,
+        datos.eliminar_cuenta,
+    ]):
+        raise HTTPException(400, "Selecciona al menos un tipo de información para eliminar")
+
+    if datos.eliminar_cuenta and _cuenta_protegida_para_purga(db, cuenta, actor):
+        raise HTTPException(
+            409,
+            {"codigo": "sin_permiso", "detalle": "No se puede eliminar completamente la cuenta protegida o el último jefe activo"},
+        )
+
+    borrar_eventos = datos.eliminar_eventos_creados or datos.eliminar_cuenta
+    borrar_notas = datos.eliminar_notas or datos.eliminar_cuenta
+    borrar_compromisos = datos.eliminar_compromisos or datos.eliminar_cuenta
+    borrar_auditorias = datos.eliminar_auditorias or datos.eliminar_cuenta
+    borrar_claves = datos.eliminar_claves_api or datos.eliminar_cuenta
+    borrar_actividades = datos.eliminar_actividades or datos.eliminar_cuenta
+
+    eventos_eliminados = 0
+    notas_eliminadas = 0
+    compromisos_eliminados = 0
+    auditorias_eliminadas = 0
+    claves_eliminadas = 0
+    actividades_eliminadas = 0
+
+    if borrar_eventos:
+        ev_ids = list(db.scalars(select(Evento.id).where(Evento.autor_id == cuenta_id)).all())
+        if ev_ids:
+            auditorias_eliminadas += db.execute(delete(Auditoria).where(Auditoria.evento_id.in_(ev_ids))).rowcount or 0
+            compromisos_eliminados += db.execute(delete(Compromiso).where(Compromiso.evento_id.in_(ev_ids))).rowcount or 0
+            notas_eliminadas += _eliminar_seguimientos(db, Seguimiento.evento_id.in_(ev_ids))
+            db.execute(delete(EventoOrigen).where(EventoOrigen.evento_id.in_(ev_ids)))
+            eventos_eliminados += db.execute(delete(Evento).where(Evento.id.in_(ev_ids))).rowcount or 0
+
+    if borrar_notas:
+        notas_eliminadas += _eliminar_seguimientos(db, Seguimiento.autor_id == cuenta_id)
+
+    if borrar_compromisos:
+        compromisos_eliminados += db.execute(delete(Compromiso).where(Compromiso.responsable_id == cuenta_id)).rowcount or 0
+
+    if borrar_auditorias:
+        auditorias_eliminadas += db.execute(delete(Auditoria).where(Auditoria.usuario_id == cuenta_id)).rowcount or 0
+
+    if borrar_claves:
+        clave_ids = list(db.scalars(select(ClaveApi.id).where(ClaveApi.creada_por_id == cuenta_id)).all())
+        if clave_ids:
+            db.execute(delete(UsoClaveApi).where(UsoClaveApi.clave_id.in_(clave_ids)))
+            claves_eliminadas += db.execute(delete(ClaveApi).where(ClaveApi.id.in_(clave_ids))).rowcount or 0
+
+    if borrar_actividades:
+        actividades_eliminadas += db.execute(
+            delete(ActividadBitacora).where(ActividadBitacora.actor_id == cuenta_id)
+        ).rowcount or 0
+
+    cuenta_eliminada = False
+    if datos.eliminar_cuenta:
+        db.execute(
+            update(Evento).where(Evento.responsable_id == cuenta_id).values(responsable_id=None)
+        )
+        db.execute(
+            update(EventoOrigen)
+            .where(EventoOrigen.responsable_id == cuenta_id)
+            .values(responsable_id=None, responsable_nombre=None, responsable_correo=None)
+        )
+        for rol in db.scalars(select(RolPersonalizado).where(RolPersonalizado.creado_por_id == cuenta_id)).all():
+            en_uso = db.scalar(
+                select(func.count()).select_from(Usuario).where(
+                    Usuario.rol_custom_id == rol.id, Usuario.id != cuenta_id
+                )
+            )
+            if en_uso:
+                rol.creado_por_id = actor.id
+            else:
+                db.delete(rol)
+        db.flush()
+        db.execute(delete(CuentaHistorica).where(CuentaHistorica.id == cuenta_id))
+        db.execute(delete(Usuario).where(Usuario.id == cuenta_id))
+        cuenta_eliminada = True
+
+    registrar_actividad(
+        db,
+        actor,
+        accion="purga_datos_cuenta",
+        entidad="usuario",
+        entidad_id=str(cuenta_id),
+        titulo=f"{cuenta.nombre} ({cuenta.correo})",
+        detalle=(
+            f"Eliminación permanente: eventos={eventos_eliminados}, notas={notas_eliminadas}, "
+            f"compromisos={compromisos_eliminados}, auditorias={auditorias_eliminadas}, "
+            f"claves={claves_eliminadas}, actividades={actividades_eliminadas}, cuenta_eliminada={cuenta_eliminada}"
+        ),
+    )
+    db.commit()
+
+    return PurgaCuentaOut(
+        cuenta_id=cuenta_id,
+        eventos_eliminados=eventos_eliminados,
+        notas_eliminadas=notas_eliminadas,
+        compromisos_eliminados=compromisos_eliminados,
+        auditorias_eliminadas=auditorias_eliminadas,
+        claves_api_eliminadas=claves_eliminadas,
+        actividades_eliminadas=actividades_eliminadas,
+        cuenta_eliminada=cuenta_eliminada,
+    )

@@ -15,3 +15,9 @@ __pycache__/
 .DS_Store
 Thumbs.db
 desktop/app_head.txt
+
+# Node / Playwright E2E
+node_modules/
+playwright-report/
+test-results/
+blob-report/

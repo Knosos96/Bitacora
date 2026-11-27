@@ -1,6 +1,64 @@
 /* ==========================================================================
-   Diseño Responsive (Tablet y Móvil)
+   Diseño Responsive (Laptops, Pantallas Medianas, Tablet y Móvil)
    ========================================================================== */
+
+@media (max-width: 1580px) {
+  body.mode-superadmin .super-mode-pill {
+    display: none;
+  }
+
+  body.mode-superadmin .user-pill {
+    max-width: 195px;
+  }
+
+  body.mode-superadmin .nav a {
+    padding: 0.35rem 0.62rem;
+    font-size: 0.82rem;
+  }
+}
+
+@media (max-width: 1360px) {
+  body.mode-superadmin .topbar-inner {
+    gap: 0.5rem 0.75rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  body.mode-superadmin .user-pill {
+    max-width: 170px;
+  }
+
+  body.mode-superadmin .nav a {
+    padding: 0.34rem 0.54rem;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 1220px) {
+  body.mode-superadmin .topbar-inner {
+    flex-wrap: wrap;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+    gap: 0.5rem 0.75rem;
+  }
+
+  body.mode-superadmin .brand-block {
+    order: 1;
+  }
+
+  body.mode-superadmin .topbar-actions {
+    order: 2;
+  }
+
+  body.mode-superadmin .nav {
+    order: 3;
+    flex: 1 0 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+    border-radius: 14px;
+    padding: 0.28rem;
+  }
+}
 
 @media (max-width: 960px) {
   .grid-4 {

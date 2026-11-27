@@ -13,6 +13,9 @@ from app.schemas.superadmin import (
     ActividadOut,
     CuentaHistoricaOut,
     ExpedienteCuentaOut,
+    PurgaCuentaIn,
+    PurgaCuentaOut,
+    PurgaResumenCuentaOut,
     RegistroDetalleOut,
     RegistroHistoricoOut,
     SuperArchivosOut,
@@ -49,6 +52,25 @@ def expediente_cuenta(
     _: Usuario = Depends(requiere_rol(Rol.superusuario)),
 ):
     return svc.expediente_cuenta(db, cuenta_id)
+
+
+@router.get("/cuentas/{cuenta_id}/purga", response_model=PurgaResumenCuentaOut)
+def resumen_purga(
+    cuenta_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    actor: Usuario = Depends(requiere_rol(Rol.superusuario)),
+):
+    return svc.resumen_purga_cuenta(db, cuenta_id, actor)
+
+
+@router.post("/cuentas/{cuenta_id}/purga", response_model=PurgaCuentaOut)
+def purgar_cuenta(
+    cuenta_id: uuid.UUID,
+    datos: PurgaCuentaIn,
+    db: Session = Depends(get_db),
+    actor: Usuario = Depends(requiere_rol(Rol.superusuario)),
+):
+    return svc.purgar_datos_cuenta(db, cuenta_id, datos, actor)
 
 
 @router.get("/registros", response_model=list[RegistroHistoricoOut])
@@ -111,7 +133,7 @@ def actividad(
 
 @router.get("/exportar")
 def exportar_dossier(
-    seccion: str = Query("actividad", pattern="^(actividad|cuentas|registros)$"),
+    seccion: str = Query("actividad", pattern="^(actividad|cuentas|registros|expediente)$"),
     cuenta_id: uuid.UUID | None = None,
     db: Session = Depends(get_db),
     _: Usuario = Depends(requiere_rol(Rol.superusuario)),

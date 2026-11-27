@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.db import get_db
 from app.core.deps import usuario_actual
 from app.models import Usuario
-from app.schemas import LoginIn, TokenOut, UsuarioOut
+from app.schemas import LoginIn, PerfilPatch, TokenOut, UsuarioOut
 from app.services import auth as svc
 from app.services.usuarios import a_salida
 
@@ -21,3 +21,12 @@ def login(datos: LoginIn, request: Request, db: Session = Depends(get_db)):
 @router.get("/yo", response_model=UsuarioOut)
 def yo(u: Usuario = Depends(usuario_actual)):
     return a_salida(u)
+
+
+@router.patch("/perfil", response_model=TokenOut)
+def actualizar_perfil(
+    datos: PerfilPatch,
+    u: Usuario = Depends(usuario_actual),
+    db: Session = Depends(get_db),
+):
+    return svc.actualizar_perfil(db, u, datos)

@@ -19,14 +19,29 @@ body.mode-superadmin .topbar {
   background: rgba(255, 255, 255, 0.96);
 }
 
+body.mode-superadmin .topbar-inner {
+  width: min(1680px, 100%);
+  gap: 0.65rem 1rem;
+}
+
+body.mode-superadmin .nav {
+  gap: 0.2rem;
+  padding: 0.22rem;
+}
+
+body.mode-superadmin .nav a {
+  padding: 0.36rem 0.68rem;
+  font-size: 0.83rem;
+}
+
 body.mode-superadmin .contenido {
-  width: min(1320px, 100%);
+  width: min(1440px, 100%);
 }
 
 .super-mode-pill {
   display: inline-flex;
   align-items: center;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -34,8 +49,8 @@ body.mode-superadmin .contenido {
   background: #e8eff8;
   border: 1px solid #bfcfe6;
   border-radius: 999px;
-  padding: 0.22rem 0.65rem;
-  margin-left: 0.55rem;
+  padding: 0.18rem 0.55rem;
+  margin-left: 0.45rem;
   white-space: nowrap;
 }
 
@@ -124,4 +139,45 @@ body.mode-superadmin .contenido {
   margin-top: 1.15rem;
   padding-top: 1rem;
   border-top: 1px solid var(--line);
+}
+
+.super-profile-grid {
+  display: grid;
+  grid-template-columns: minmax(250px, 1fr) minmax(0, 1.5fr);
+  gap: 1.15rem;
+  align-items: start;
+}
+
+.profile-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.profile-avatar-lg {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--accent);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 1.05rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.profile-meta-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.9rem;
+}
+
+@media (max-width: 900px) {
+  .super-profile-grid {
+    grid-template-columns: 1fr;
+  }
 }

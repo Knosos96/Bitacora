@@ -28,6 +28,13 @@
   gap: 1rem;
 }
 
+.brand-block {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
 .brand-block .brand {
   font-size: 1.15rem;
 }
@@ -36,6 +43,8 @@
   display: flex;
   align-items: center;
   gap: 0.3rem;
+  min-width: 0;
+  max-width: 100%;
   background: var(--surface-soft);
   border: 1px solid var(--line);
   padding: 0.25rem;
@@ -68,6 +77,7 @@
   display: flex;
   align-items: center;
   gap: 0.6rem;
+  flex-shrink: 0;
 }
 
 .user-pill {

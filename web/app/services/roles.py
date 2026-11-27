@@ -37,7 +37,17 @@ def listar(db: Session, incluir_inactivos: bool = False):
 
 
 def listar_permisos() -> list[dict]:
-    return [{"codigo": p.value, "descripcion": DESCRIPCIONES[p]} for p in Permiso]
+    return [
+        {"codigo": p.value, "descripcion": DESCRIPCIONES[p]}
+        for p in Permiso
+        if p != Permiso.ver_superadmin and p in DESCRIPCIONES
+    ]
+
+
+def _validar_permisos_custom(permisos: list[Permiso]) -> list[str]:
+    if Permiso.ver_superadmin in permisos:
+        raise HTTPException(409, {"codigo": "sin_permiso", "detalle": "El permiso de superusuario es exclusivo"})
+    return [p.value for p in permisos]
 
 
 def crear(db: Session, datos: RolPersonalizadoIn, jefe: Usuario) -> RolPersonalizado:
@@ -47,7 +57,7 @@ def crear(db: Session, datos: RolPersonalizadoIn, jefe: Usuario) -> RolPersonali
     rol = RolPersonalizado(
         nombre=nombre,
         descripcion=(datos.descripcion or "").strip(),
-        permisos=[p.value for p in datos.permisos],
+        permisos=_validar_permisos_custom(datos.permisos),
         creado_por_id=jefe.id,
     )
     db.add(rol)
@@ -69,7 +79,7 @@ def editar(db: Session, rol_id: uuid.UUID, datos: RolPersonalizadoPatch) -> RolP
     if datos.descripcion is not None:
         rol.descripcion = datos.descripcion.strip()
     if datos.permisos is not None:
-        rol.permisos = [p.value for p in datos.permisos]
+        rol.permisos = _validar_permisos_custom(datos.permisos)
     if datos.activo is not None:
         rol.activo = datos.activo
     db.commit()

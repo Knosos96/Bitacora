@@ -170,3 +170,41 @@ class RegistroDetalleOut(BaseModel):
     notas: list[SeguimientoDocOut]
     compromisos: list[CompromisoDocOut]
     auditoria: list[AuditoriaDocOut]
+
+
+class PurgaResumenCuentaOut(BaseModel):
+    cuenta_id: uuid.UUID
+    nombre: str
+    correo: str
+    rol: str
+    estado: str
+    eventos_creados: int
+    eventos_asignados: int
+    notas_en_otros_eventos: int
+    compromisos_en_otros_eventos: int
+    auditorias_en_otros_eventos: int
+    claves_api: int
+    roles_creados: int
+    actividades: int
+    es_protegida: bool
+
+
+class PurgaCuentaIn(BaseModel):
+    eliminar_eventos_creados: bool = False
+    eliminar_notas: bool = False
+    eliminar_compromisos: bool = False
+    eliminar_auditorias: bool = False
+    eliminar_claves_api: bool = False
+    eliminar_actividades: bool = False
+    eliminar_cuenta: bool = False
+
+
+class PurgaCuentaOut(BaseModel):
+    cuenta_id: uuid.UUID
+    eventos_eliminados: int = 0
+    notas_eliminadas: int = 0
+    compromisos_eliminados: int = 0
+    auditorias_eliminadas: int = 0
+    claves_api_eliminadas: int = 0
+    actividades_eliminadas: int = 0
+    cuenta_eliminada: bool = False

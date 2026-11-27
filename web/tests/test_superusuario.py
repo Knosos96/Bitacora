@@ -199,3 +199,138 @@ def test_eliminacion_logica_preserva_atribucion_sin_cascada(equipo):
     nuevas = [x for x in cuentas if x["id"] == nuevo_id]
     assert viejas[0]["correo"] == "ana@x.com" and viejas[0]["estado"] == "eliminada"
     assert nuevas[0]["correo"] == "ana@x.com" and nuevas[0]["estado"] == "activa"
+
+
+def test_mi_perfil_superusuario_actualiza_credenciales_y_rota_token(equipo):
+    c = equipo
+    h_super = _con_super(c)
+
+    # Clave actual incorrecta -> 401
+    r_bad = c.patch("/api/v1/auth/perfil", headers=h_super, json={
+        "clave_actual": "Incorrecta1",
+        "nombre": "Nuevo Nombre",
+    })
+    assert r_bad.status_code == 401
+
+    # Correo ya ocupado -> 400
+    r_dup = c.patch("/api/v1/auth/perfil", headers=h_super, json={
+        "clave_actual": "SuperClave1",
+        "correo": "jefe@x.com",
+    })
+    assert r_dup.status_code == 400
+
+    # Actualización válida de nombre, correo y contraseña
+    r_ok = c.patch("/api/v1/auth/perfil", headers=h_super, json={
+        "clave_actual": "SuperClave1",
+        "nombre": "Auditor Principal",
+        "correo": "auditor@zgroup.com",
+        "clave_nueva": "NuevaClave99",
+    })
+    assert r_ok.status_code == 200, r_ok.text
+    data = r_ok.json()
+    assert data["usuario"]["nombre"] == "Auditor Principal"
+    assert data["usuario"]["correo"] == "auditor@zgroup.com"
+    h_nuevo = {"Authorization": f"Bearer {data['token']}"}
+
+    # El token anterior queda invalidado al cambiar contraseña
+    assert c.get("/api/v1/superadmin/resumen", headers=h_super).status_code == 401
+    assert c.get("/api/v1/superadmin/resumen", headers=h_nuevo).status_code == 200
+
+    # Login con credenciales anteriores falla y con nuevas funciona
+    assert c.post("/api/v1/auth/login", json={"correo": "super@x.com", "clave": "SuperClave1"}).status_code == 401
+    assert c.post("/api/v1/auth/login", json={"correo": "auditor@zgroup.com", "clave": "NuevaClave99"}).status_code == 200
+
+    # CuentaHistorica y ActividadBitacora reflejan el cambio sin filtrar contraseñas
+    cuentas = c.get("/api/v1/superadmin/cuentas", headers=h_nuevo).json()
+    yo_hist = next(x for x in cuentas if x["id"] == data["usuario"]["id"])
+    assert yo_hist["nombre"] == "Auditor Principal"
+    assert yo_hist["correo"] == "auditor@zgroup.com"
+
+    acts = c.get("/api/v1/superadmin/actividad", headers=h_nuevo).json()
+    act_perfil = next(a for a in acts if a["accion"] == "perfil_actualizado")
+    assert "NuevaClave99" not in act_perfil["detalle"] and "SuperClave1" not in act_perfil["detalle"]
+
+
+def test_exportar_expediente_individual_aislado(equipo):
+    c = equipo
+    h_super = _con_super(c)
+    jefe = entrar(c, "jefe@x.com")
+    asis = entrar(c, "asis@x.com")
+
+    ev_jefe = crear(c, jefe, titulo="Evento exclusivo del jefe", descripcion="No debe salir en expediente asis")
+    ev_asis = crear(c, asis, titulo="Evento exclusivo asistente", descripcion="Debe salir solo aqui", requiere_seguimiento=True)
+
+    # Sin cuenta_id -> 400
+    assert c.get("/api/v1/superadmin/exportar?seccion=expediente", headers=h_super).status_code == 400
+
+    asis_id = c.get("/api/v1/auth/yo", headers=asis).json()["id"]
+    r_exp = c.get(f"/api/v1/superadmin/exportar?seccion=expediente&cuenta_id={asis_id}", headers=h_super)
+    assert r_exp.status_code == 200
+    texto = r_exp.content.decode("utf-8")
+    assert "EXPEDIENTE INDIVIDUAL DE CUENTA" in texto
+    assert "asis@x.com" in texto
+    assert ev_asis["folio"] in texto
+    assert ev_jefe["folio"] not in texto
+    assert "jefe@x.com" not in texto
+
+
+def test_purga_selectiva_y_eliminacion_total_cuenta(equipo):
+    c = equipo
+    h_super = _con_super(c)
+    jefe = entrar(c, "jefe@x.com")
+    asis = entrar(c, "asis@x.com")
+    enca = entrar(c, "enca@x.com")
+
+    # El asistente crea un evento propio y además participa en un evento del encargado
+    ev_asis = crear(c, asis, titulo="Prueba de asistente", descripcion="Para purgar luego", requiere_seguimiento=True)
+    ev_enca = crear(c, enca, titulo="Evento encargado compartido", descripcion="Debe permanecer", requiere_seguimiento=True)
+    assert c.post(f"/api/v1/eventos/{ev_enca['folio']}/seguimientos", headers=asis, json={"nota": "Nota temporal asis"}).status_code == 201
+    assert c.post(f"/api/v1/eventos/{ev_enca['folio']}/compromisos", headers=enca, json={
+        "descripcion": "Compromiso del asis", "fecha_limite": manana(), "responsable_id": c.get("/api/v1/auth/yo", headers=asis).json()["id"]
+    }).status_code == 201
+
+    asis_id = c.get("/api/v1/auth/yo", headers=asis).json()["id"]
+    jefe_id = c.get("/api/v1/auth/yo", headers=jefe).json()["id"]
+    super_id = c.get("/api/v1/auth/yo", headers=h_super).json()["id"]
+
+    # Resumen de purga
+    res = c.get(f"/api/v1/superadmin/cuentas/{asis_id}/purga", headers=h_super)
+    assert res.status_code == 200
+    info = res.json()
+    assert info["eventos_creados"] == 1
+    assert info["notas_en_otros_eventos"] == 1
+    assert info["compromisos_en_otros_eventos"] == 1
+    assert info["es_protegida"] is False
+
+    # Cuentas protegidas (superusuario y último jefe activo)
+    assert c.get(f"/api/v1/superadmin/cuentas/{super_id}/purga", headers=h_super).json()["es_protegida"] is True
+    assert c.get(f"/api/v1/superadmin/cuentas/{jefe_id}/purga", headers=h_super).json()["es_protegida"] is True
+    assert c.post(f"/api/v1/superadmin/cuentas/{jefe_id}/purga", headers=h_super, json={"eliminar_cuenta": True}).status_code == 409
+
+    # Selección vacía -> 400
+    assert c.post(f"/api/v1/superadmin/cuentas/{asis_id}/purga", headers=h_super, json={}).status_code == 400
+
+    # Purga selectiva: eliminar solo notas y actividades del asistente (conservando su evento y su cuenta)
+    r_sel = c.post(f"/api/v1/superadmin/cuentas/{asis_id}/purga", headers=h_super, json={
+        "eliminar_notas": True,
+        "eliminar_actividades": True,
+    })
+    assert r_sel.status_code == 200, r_sel.text
+    assert r_sel.json()["notas_eliminadas"] == 1
+    assert r_sel.json()["actividades_eliminadas"] >= 1
+    assert r_sel.json()["eventos_eliminados"] == 0
+    assert r_sel.json()["cuenta_eliminada"] is False
+    assert c.get(f"/api/v1/superadmin/registros/{ev_asis['folio']}", headers=h_super).status_code == 200
+    notas_enca = c.get(f"/api/v1/superadmin/registros/{ev_enca['folio']}", headers=h_super).json()["notas"]
+    assert all(n["nota"] != "Nota temporal asis" and n["autor_id"] != asis_id for n in notas_enca)
+
+    # Purga total: eliminar la cuenta completa y todas sus dependencias
+    r_full = c.post(f"/api/v1/superadmin/cuentas/{asis_id}/purga", headers=h_super, json={"eliminar_cuenta": True})
+    assert r_full.status_code == 200, r_full.text
+    assert r_full.json()["cuenta_eliminada"] is True
+    assert r_full.json()["eventos_eliminados"] == 1
+    assert r_full.json()["compromisos_eliminados"] == 1
+    assert c.get(f"/api/v1/superadmin/cuentas/{asis_id}", headers=h_super).status_code == 404
+    assert c.get(f"/api/v1/superadmin/registros/{ev_asis['folio']}", headers=h_super).status_code == 404
+    # El evento del encargado permanece intacto
+    assert c.get(f"/api/v1/superadmin/registros/{ev_enca['folio']}", headers=h_super).status_code == 200

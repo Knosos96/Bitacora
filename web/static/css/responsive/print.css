@@ -32,6 +32,11 @@
   .modal {
     position: static !important;
     padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.has-modal-open #vista-app {
+    display: none !important;
   }
 
   .modal-backdrop {
@@ -40,7 +45,21 @@
 
   .modal-panel {
     max-height: none !important;
+    overflow: visible !important;
     box-shadow: none !important;
+    border: none !important;
+    padding: 0 !important;
     width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .table-wrap {
+    overflow: visible !important;
+  }
+
+  .meta-item,
+  .nota-item,
+  .timeline-item {
+    break-inside: avoid;
   }
 }

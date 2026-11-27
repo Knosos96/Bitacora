@@ -34,13 +34,21 @@ function mostrarLogin() {
   $("#vista-app").classList.add("hidden");
 }
 
+function sincronizarCabeceraUsuario() {
+  const u = api.usuario;
+  if (!u) return;
+  const etiqueta = `${u.nombre} · ${u.rol_custom_nombre || u.rol}`;
+  const ini = iniciales(u.nombre);
+  $("#user-chip").textContent = etiqueta;
+  $("#user-avatar").textContent = ini;
+  $("#user-chip-mobile").textContent = etiqueta;
+  $("#user-avatar-mobile").textContent = ini;
+}
+
 function mostrarApp() {
   $("#vista-login").classList.add("hidden");
   $("#vista-app").classList.remove("hidden");
-  const u = api.usuario;
   const esSuper = api.esSuperusuario;
-  const etiqueta = `${u.nombre} · ${u.rol_custom_nombre || u.rol}`;
-  const ini = iniciales(u.nombre);
 
   document.body.classList.toggle("mode-superadmin", esSuper);
   $("#super-mode-pill")?.classList.toggle("hidden", !esSuper);
@@ -49,10 +57,7 @@ function mostrarApp() {
     ? "ZGROUP · Portal Documental y de Auditoría (Superusuario)"
     : "Bitácora TI · Gestión operativa";
 
-  $("#user-chip").textContent = etiqueta;
-  $("#user-avatar").textContent = ini;
-  $("#user-chip-mobile").textContent = etiqueta;
-  $("#user-avatar-mobile").textContent = ini;
+  sincronizarCabeceraUsuario();
 
   $$(".solo-operativo").forEach((el) => el.classList.toggle("hidden", esSuper));
   $$(".solo-super").forEach((el) => el.classList.toggle("hidden", !esSuper));
@@ -153,7 +158,12 @@ const refrescarFondo = async () => {
   await enrutar();
 };
 
-const ctx = { api, actualizarAviso, enrutar: refrescarFondo };
+const ctx = {
+  api,
+  actualizarAviso,
+  enrutar: refrescarFondo,
+  refrescarUsuario: sincronizarCabeceraUsuario,
+};
 
 window.addEventListener("hashchange", enrutar);
 

@@ -1,0 +1,15 @@
+{
+  "name": "bitacora-ti-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pruebas E2E con Playwright Test y Faker.js para Bitácora TI",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.9.0",
+    "@playwright/test": "^1.52.0"
+  }
+}

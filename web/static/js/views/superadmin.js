@@ -1,5 +1,18 @@
-import { ESTADOS, TIPOS, esc } from "../services/api.js";
-import { $, abrirModal, badge, toast } from "../components/ui.js";
+import { ESTADOS, ErrorApi, TIPOS, esc } from "../services/api.js";
+import {
+  $,
+  abrirModal,
+  badge,
+  campoClaveHtml,
+  campoClaveSimpleHtml,
+  campoCorreoHtml,
+  cerrarModal,
+  enlazarCriterios,
+  iniciales,
+  toast,
+  validarClaveCriterios,
+  validarCorreoCriterios,
+} from "../components/ui.js";
 
 function fmtFecha(iso) {
   if (!iso) return "—";
@@ -206,7 +219,179 @@ async function verFichaDocumental(folio, api) {
   $("#doc-ficha-print").onclick = () => window.print();
 }
 
-async function verExpedienteCuenta(cuentaId, api) {
+async function abrirModalPurga(cuentaId, api, onDone = null) {
+  let info;
+  try {
+    info = await api.superPurgaResumen(cuentaId);
+  } catch (ex) {
+    toast(ex.message, "error");
+    return;
+  }
+
+  abrirModal(`
+    <div class="modal-header">
+      <div>
+        <div class="row" style="gap:0.5rem;margin-bottom:0.25rem">
+          <span class="badge ${esc(info.estado)}">${esc(info.estado)}</span>
+          <span class="badge">${esc(info.rol)}</span>
+        </div>
+        <h2>Eliminar información de la base de datos</h2>
+        <p class="muted text-sm" style="margin:0.15rem 0 0">${esc(info.nombre)} · ${esc(info.correo)}</p>
+      </div>
+      <button type="button" class="btn ghost btn-sm" data-close-modal>Cerrar</button>
+    </div>
+
+    <p class="alert-inline error" style="margin-bottom:0.9rem">
+      Esta acción elimina permanentemente de PostgreSQL los registros seleccionados. No se puede deshacer.
+    </p>
+
+    <form id="form-purga" class="stack">
+      <div class="row spread">
+        <strong>Selecciona qué información deseas eliminar:</strong>
+        <button type="button" class="btn soft btn-sm" id="purga-marcar-todo">Seleccionar todo</button>
+      </div>
+
+      <fieldset class="permisos-box">
+        <legend>Datos asociados a la cuenta</legend>
+        <div class="stack" style="gap:0.55rem">
+          <label class="check-row">
+            <input type="checkbox" name="eliminar_eventos_creados" />
+            <span><strong>Eventos e incidencias creadas (${info.eventos_creados})</strong> <span class="muted">— incluye notas, compromisos y auditoría propios de esos eventos</span></span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" name="eliminar_notas" />
+            <span><strong>Notas de seguimiento en otros eventos (${info.notas_en_otros_eventos})</strong></span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" name="eliminar_compromisos" />
+            <span><strong>Compromisos asignados en otros eventos (${info.compromisos_en_otros_eventos})</strong></span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" name="eliminar_auditorias" />
+            <span><strong>Correcciones de auditoría realizadas (${info.auditorias_en_otros_eventos})</strong></span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" name="eliminar_claves_api" />
+            <span><strong>Claves API emitidas y su historial de usos (${info.claves_api})</strong></span>
+          </label>
+          <label class="check-row">
+            <input type="checkbox" name="eliminar_actividades" />
+            <span><strong>Bitácora cronológica de actividad (${info.actividades})</strong></span>
+          </label>
+        </div>
+      </fieldset>
+
+      <div class="meta-item" style="border-color:var(--danger-border);background:var(--danger-soft)">
+        <label class="check-row" style="align-items:flex-start">
+          <input type="checkbox" name="eliminar_cuenta" ${info.es_protegida ? "disabled" : ""} />
+          <span>
+            <strong style="color:var(--danger)">Eliminar también la cuenta completa de la base de datos</strong>
+            <div class="muted text-sm" style="font-weight:400">
+              ${info.es_protegida
+                ? "Cuenta protegida (Superusuario actual o último Jefe activo): solo puedes depurar sus registros de prueba, no la cuenta."
+                : "Borra definitivamente la cuenta y su expediente histórico junto con todas sus dependencias."}
+            </div>
+          </span>
+        </label>
+      </div>
+
+      <p id="purga-error" class="alert-inline error" hidden></p>
+
+      <div id="purga-confirm-box" class="panel hidden" style="border-color:var(--danger-border);background:var(--danger-soft);margin:0;padding:0.85rem">
+        <p style="margin:0 0 0.65rem;font-weight:600;color:var(--danger)">
+          ¿Confirmas que deseas eliminar permanentemente la información marcada de «${esc(info.nombre)}»?
+        </p>
+        <div class="row" style="justify-content:flex-end">
+          <button type="button" class="btn ghost btn-sm" id="purga-volver">Cancelar</button>
+          <button type="button" class="btn danger btn-sm" id="purga-confirmar-ok">Sí, eliminar permanentemente</button>
+        </div>
+      </div>
+
+      <div class="row" id="purga-actions" style="justify-content:flex-end">
+        <button type="button" class="btn ghost" data-close-modal>Cancelar</button>
+        <button type="submit" class="btn danger">Eliminar información seleccionada</button>
+      </div>
+    </form>
+  `, { sm: false });
+
+  const form = $("#form-purga");
+  const checksDatos = [...form.querySelectorAll('input[type="checkbox"]:not([name="eliminar_cuenta"])')];
+  const checkCuenta = form.querySelector('input[name="eliminar_cuenta"]');
+
+  checkCuenta?.addEventListener("change", () => {
+    if (checkCuenta.checked) {
+      checksDatos.forEach((ch) => { ch.checked = true; });
+    }
+  });
+
+  $("#purga-marcar-todo").onclick = () => {
+    const habilitar = !checksDatos.every((ch) => ch.checked);
+    checksDatos.forEach((ch) => { ch.checked = habilitar; });
+    if (checkCuenta && !checkCuenta.disabled) checkCuenta.checked = habilitar;
+  };
+
+  let payloadPendiente = null;
+
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    const err = $("#purga-error");
+    err.hidden = true;
+    const fd = new FormData(form);
+    const payload = {
+      eliminar_eventos_creados: fd.get("eliminar_eventos_creados") === "on",
+      eliminar_notas: fd.get("eliminar_notas") === "on",
+      eliminar_compromisos: fd.get("eliminar_compromisos") === "on",
+      eliminar_auditorias: fd.get("eliminar_auditorias") === "on",
+      eliminar_claves_api: fd.get("eliminar_claves_api") === "on",
+      eliminar_actividades: fd.get("eliminar_actividades") === "on",
+      eliminar_cuenta: fd.get("eliminar_cuenta") === "on",
+    };
+
+    if (!Object.values(payload).some(Boolean)) {
+      err.textContent = "Marca al menos una categoría de información para eliminar.";
+      err.hidden = false;
+      return;
+    }
+    payloadPendiente = payload;
+    $("#purga-confirm-box").classList.remove("hidden");
+    $("#purga-actions").classList.add("hidden");
+  };
+
+  $("#purga-volver").onclick = () => {
+    payloadPendiente = null;
+    $("#purga-confirm-box").classList.add("hidden");
+    $("#purga-actions").classList.remove("hidden");
+  };
+
+  $("#purga-confirmar-ok").onclick = async () => {
+    if (!payloadPendiente) return;
+    const btn = $("#purga-confirmar-ok");
+    const err = $("#purga-error");
+    btn.disabled = true;
+    err.hidden = true;
+    try {
+      const r = await api.superPurgarCuenta(cuentaId, payloadPendiente);
+      cerrarModal();
+      const resumen = [
+        r.eventos_eliminados ? `${r.eventos_eliminados} evento(s)` : null,
+        r.notas_eliminadas ? `${r.notas_eliminadas} nota(s)` : null,
+        r.compromisos_eliminados ? `${r.compromisos_eliminados} compromiso(s)` : null,
+        r.auditorias_eliminadas ? `${r.auditorias_eliminadas} auditoría(s)` : null,
+        r.claves_api_eliminadas ? `${r.claves_api_eliminadas} clave(s)` : null,
+        r.actividades_eliminadas ? `${r.actividades_eliminadas} movimiento(s)` : null,
+        r.cuenta_eliminada ? "cuenta eliminada" : null,
+      ].filter(Boolean).join(", ");
+      toast(`Información eliminada: ${resumen || "completado"}`, "ok");
+      if (onDone) await onDone();
+    } catch (ex) {
+      err.textContent = ex.message;
+      err.hidden = false;
+      btn.disabled = false;
+    }
+  };
+}
+
+async function verExpedienteCuenta(cuentaId, api, onDone = null) {
   let exp;
   try {
     exp = await api.superExpediente(cuentaId);
@@ -226,6 +411,7 @@ async function verExpedienteCuenta(cuentaId, api) {
         <p class="muted text-sm" style="margin:0.15rem 0 0">${esc(c.correo)}</p>
       </div>
       <div class="row">
+        <button type="button" class="btn danger btn-sm" id="exp-purgar">Eliminar datos</button>
         <button type="button" class="btn soft btn-sm" id="exp-csv">Exportar CSV</button>
         <button type="button" class="btn soft btn-sm" id="exp-print">Imprimir</button>
         <button type="button" class="btn ghost btn-sm" data-close-modal>Cerrar</button>
@@ -291,9 +477,10 @@ async function verExpedienteCuenta(cuentaId, api) {
     </div>
   `);
 
+  $("#exp-purgar").onclick = () => abrirModalPurga(c.id, api, onDone);
   $("#exp-csv").onclick = () => descargarCsv(
     api,
-    { seccion: "registros", cuenta_id: c.id },
+    { seccion: "expediente", cuenta_id: c.id },
     `expediente-${c.correo.replace(/[^a-z0-9]/gi, "_")}.csv`,
   );
   $("#exp-print").onclick = () => window.print();
@@ -301,7 +488,8 @@ async function verExpedienteCuenta(cuentaId, api) {
 
 /* ========================== VISTAS DEL PORTAL ========================== */
 
-export async function vistaSuperadmin(box, path, { api }) {
+export async function vistaSuperadmin(box, path, ctx) {
+  const { api } = ctx;
   if (!api.esSuperusuario) {
     box.innerHTML = `<div class="panel"><p class="alert-inline error">Acceso restringido al rol de Superusuario.</p></div>`;
     return;
@@ -314,6 +502,7 @@ export async function vistaSuperadmin(box, path, { api }) {
   else if (sub === "pendientes") await renderPendientes(box, api);
   else if (sub === "archivos") await renderArchivos(box, api);
   else if (sub === "actividad") await renderActividad(box, api);
+  else if (sub === "perfil") await renderPerfil(box, api, ctx);
   else await renderResumen(box, api);
 
   box.onclick = async (e) => {
@@ -324,7 +513,12 @@ export async function vistaSuperadmin(box, path, { api }) {
     }
     const btnExp = e.target.closest("[data-expediente]");
     if (btnExp) {
-      await verExpedienteCuenta(btnExp.dataset.expediente, api);
+      await verExpedienteCuenta(btnExp.dataset.expediente, api, () => ctx.enrutar?.());
+      return;
+    }
+    const btnPurga = e.target.closest("[data-purgar]");
+    if (btnPurga) {
+      await abrirModalPurga(btnPurga.dataset.purgar, api, () => ctx.enrutar?.());
       return;
     }
     if (e.target.id === "sup-print") {
@@ -390,7 +584,10 @@ async function renderResumen(box, api) {
           <td>${c.incidencias_creadas}</td>
           <td>${c.eventos_creados}</td>
           <td>${c.pendientes_abiertos}</td>
-          <td><button type="button" class="btn soft btn-sm" data-expediente="${c.id}">Ver expediente</button></td>
+          <td><div class="cell-actions">
+            <button type="button" class="btn soft btn-sm" data-expediente="${c.id}">Ver expediente</button>
+            <button type="button" class="btn danger btn-sm" data-purgar="${c.id}">Eliminar datos</button>
+          </div></td>
         </tr>`).join("")}</tbody>
       </table></div>
     </section>
@@ -464,7 +661,10 @@ async function renderCuentas(box, api) {
           <td>${c.eventos_creados}</td>
           <td>${c.pendientes_abiertos}</td>
           <td>${c.actividades_count}</td>
-          <td><button type="button" class="btn soft btn-sm" data-expediente="${c.id}">Ver expediente</button></td>
+          <td><div class="cell-actions">
+            <button type="button" class="btn soft btn-sm" data-expediente="${c.id}">Ver expediente</button>
+            <button type="button" class="btn danger btn-sm" data-purgar="${c.id}">Eliminar datos</button>
+          </div></td>
         </tr>`).join("")
       : `<tr><td colspan="9"><div class="empty-state" style="border:0">Sin cuentas que coincidan.</div></td></tr>`;
   };
@@ -508,9 +708,12 @@ async function renderRegistros(box, api) {
 
   const filtrar = async () => {
     try {
+      const cid = $("#sr-cuenta").value || undefined;
+      const btnExp = $("#sup-export-csv");
+      if (btnExp) btnExp.dataset.cid = cid || "";
       const filas = await api.superRegistros({
         q: $("#sr-q").value.trim() || undefined,
-        cuenta_id: $("#sr-cuenta").value || undefined,
+        cuenta_id: cid,
         tipo: $("#sr-tipo").value || undefined,
         estado: $("#sr-estado").value || undefined,
       });
@@ -521,6 +724,7 @@ async function renderRegistros(box, api) {
     }
   };
   $("#sr-btn").onclick = filtrar;
+  $("#sr-cuenta").addEventListener("change", filtrar);
   $("#sr-q").addEventListener("keydown", (e) => { if (e.key === "Enter") filtrar(); });
 }
 
@@ -653,9 +857,12 @@ async function renderActividad(box, api) {
 
   const filtrar = async () => {
     try {
+      const cid = $("#sa-cuenta").value || undefined;
+      const btnExp = $("#sup-export-csv");
+      if (btnExp) btnExp.dataset.cid = cid || "";
       const filas = await api.superActividad({
         q: $("#sa-q").value.trim() || undefined,
-        cuenta_id: $("#sa-cuenta").value || undefined,
+        cuenta_id: cid,
         entidad: $("#sa-entidad").value || undefined,
         desde: $("#sa-desde").value || undefined,
         hasta: $("#sa-hasta").value || undefined,
@@ -668,5 +875,135 @@ async function renderActividad(box, api) {
     }
   };
   $("#sa-btn").onclick = filtrar;
+  $("#sa-cuenta").addEventListener("change", filtrar);
   $("#sa-q").addEventListener("keydown", (e) => { if (e.key === "Enter") filtrar(); });
+}
+
+async function renderPerfil(box, api, ctx) {
+  const u = await api.yo().catch(() => api.usuario);
+  box.innerHTML = `
+    ${bannerSuper({
+      titulo: "Mi perfil · Superusuario",
+      subtitulo: "Actualiza tu nombre, correo electrónico o contraseña de acceso con verificación de identidad.",
+    })}
+
+    <div class="super-profile-grid">
+      <section class="panel">
+        <div class="profile-card-head">
+          <span class="profile-avatar-lg">${esc(iniciales(u.nombre))}</span>
+          <div>
+            <h2 style="margin:0">${esc(u.nombre)}</h2>
+            <div class="muted text-sm">${esc(u.correo)}</div>
+          </div>
+        </div>
+
+        <div class="profile-meta-list">
+          <div class="meta-item">
+            <div class="meta-label">Rol del sistema</div>
+            <div class="meta-val"><span class="badge abierto">${esc(u.rol)}</span></div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Estado de la cuenta</div>
+            <div class="meta-val"><span class="badge activo">activa</span></div>
+          </div>
+          <div class="meta-item">
+            <div class="meta-label">Seguridad de sesiones</div>
+            <div class="meta-val text-sm muted" style="font-weight:400">
+              Al cambiar tu contraseña, cualquier sesión abierta en otros dispositivos caducará automáticamente y tu historial quedará registrado en la bitácora.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Editar credenciales y datos de acceso</h2>
+        </div>
+
+        <form id="form-super-perfil" class="stack">
+          <label class="field">
+            <span>Nombre completo</span>
+            <input name="nombre" required maxlength="120" value="${esc(u.nombre)}" />
+          </label>
+
+          ${campoCorreoHtml({ name: "correo", label: "Correo electrónico", value: u.correo })}
+
+          ${campoClaveHtml({
+            name: "clave_nueva",
+            label: "Nueva contraseña (opcional: déjalo vacío si no deseas cambiarla)",
+            placeholder: "Mínimo 8 caracteres (letras y números)",
+            required: false,
+          })}
+
+          ${campoClaveSimpleHtml({
+            name: "clave_confirmar",
+            label: "Confirmar nueva contraseña",
+            placeholder: "Repite la nueva contraseña",
+            required: false,
+            autocomplete: "new-password",
+          })}
+
+          ${campoClaveSimpleHtml({
+            name: "clave_actual",
+            label: "Contraseña actual (obligatoria para guardar cambios)",
+            placeholder: "Ingresa tu contraseña actual",
+            required: true,
+            autocomplete: "current-password",
+          })}
+
+          <p id="sp-perfil-error" class="alert-inline error" hidden></p>
+
+          <div class="row" style="justify-content:flex-end">
+            <button type="submit" class="btn primary">Guardar cambios</button>
+          </div>
+        </form>
+      </section>
+    </div>`;
+
+  enlazarCriterios(box);
+
+  $("#form-super-perfil").onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $("#sp-perfil-error");
+    err.hidden = true;
+    const btn = e.target.querySelector('[type="submit"]');
+    const fd = new FormData(e.target);
+
+    const nombre = String(fd.get("nombre") || "").trim();
+    const correo = String(fd.get("correo") || "").trim().toLowerCase();
+    const claveNueva = String(fd.get("clave_nueva") || "");
+    const claveConfirmar = String(fd.get("clave_confirmar") || "");
+    const claveActual = String(fd.get("clave_actual") || "");
+
+    try {
+      if (!nombre) throw new ErrorApi("El nombre no puede estar vacío.");
+      validarCorreoCriterios(correo);
+
+      if (claveNueva || claveConfirmar) {
+        validarClaveCriterios(claveNueva);
+        if (claveNueva !== claveConfirmar) {
+          throw new ErrorApi("La nueva contraseña y su confirmación no coinciden.");
+        }
+      }
+
+      const payload = { clave_actual: claveActual };
+      if (nombre !== u.nombre) payload.nombre = nombre;
+      if (correo !== u.correo) payload.correo = correo;
+      if (claveNueva) payload.clave_nueva = claveNueva;
+
+      if (!payload.nombre && !payload.correo && !payload.clave_nueva) {
+        throw new ErrorApi("No realizaste cambios respecto a tus datos actuales.");
+      }
+
+      btn.disabled = true;
+      await api.actualizarPerfil(payload);
+      ctx?.refrescarUsuario?.();
+      toast("Perfil actualizado correctamente", "ok");
+      await renderPerfil(box, api, ctx);
+    } catch (ex) {
+      err.textContent = ex.message;
+      err.hidden = false;
+      btn.disabled = false;
+    }
+  };
 }

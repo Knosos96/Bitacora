@@ -3,7 +3,7 @@
 Uso: `from app.schemas import EventoOut, UsuarioIn`
 """
 from app.schemas.area import AreaIn, AreaOut, AreaPatch, AreaRef
-from app.schemas.auth import LoginIn, TokenOut
+from app.schemas.auth import LoginIn, PerfilPatch, TokenOut
 from app.schemas.claves import ClaveApiCreada, ClaveApiIn, ClaveApiOut
 from app.schemas.compromiso import CompromisoIn, CompromisoOut, CompromisoPatch, CompromisoPendienteOut
 from app.schemas.evento import (
@@ -45,7 +45,7 @@ __all__ = [
     "CompromisoIn", "CompromisoOut", "CompromisoPatch", "CompromisoPendienteOut",
     "EventoBusquedaOut", "EventoDetalleOut", "EventoIn", "EventoOut", "EventoPatch", "EventosPagina",
     "Indicador", "KpiListaOut",
-    "LoginIn",
+    "LoginIn", "PerfilPatch",
     "Meta",
     "PendientesOut",
     "RolPersonalizadoIn", "RolPersonalizadoOut", "RolPersonalizadoPatch",

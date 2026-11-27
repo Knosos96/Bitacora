@@ -73,11 +73,13 @@ export function campoCorreoHtml({
   name = "correo",
   label = "Correo electrónico",
   placeholder = "usuario@dominio.com",
+  value = "",
+  required = true,
 } = {}) {
   return `
     <div class="field" data-email-check>
       <span>${esc(label)}</span>
-      <input name="${esc(name)}" type="email" required placeholder="${esc(placeholder)}" autocomplete="off" />
+      <input name="${esc(name)}" type="email" ${required ? "required" : ""} value="${esc(value)}" placeholder="${esc(placeholder)}" autocomplete="off" />
       <ul class="criteria-list">
         <li class="criteria-item" data-crit="formato"><span class="crit-dot">✓</span>Incluye usuario y símbolo @</li>
         <li class="criteria-item" data-crit="dominio"><span class="crit-dot">✓</span>Dominio válido (ej. @empresa.com)</li>
@@ -90,12 +92,13 @@ export function campoClaveHtml({
   name = "clave",
   label = "Contraseña",
   placeholder = "Mínimo 8 caracteres (letras y números)",
+  required = true,
 } = {}) {
   return `
     <div class="field" data-pass-check>
       <span>${esc(label)}</span>
       <div class="password-wrap">
-        <input name="${esc(name)}" type="password" required minlength="8" placeholder="${esc(placeholder)}" autocomplete="new-password" />
+        <input name="${esc(name)}" type="password" ${required ? "required" : ""} minlength="8" placeholder="${esc(placeholder)}" autocomplete="new-password" />
         <button type="button" class="btn-eye" data-toggle-pass aria-label="Mostrar u ocultar contraseña" title="Mostrar u ocultar contraseña">
           ${ICON_EYE}
         </button>
@@ -109,7 +112,26 @@ export function campoClaveHtml({
     </div>`;
 }
 
-function enlazarCriterios(contenedor) {
+export function campoClaveSimpleHtml({
+  name = "clave_actual",
+  label = "Contraseña actual",
+  placeholder = "••••••••",
+  required = true,
+  autocomplete = "current-password",
+} = {}) {
+  return `
+    <div class="field">
+      <span>${esc(label)}</span>
+      <div class="password-wrap">
+        <input name="${esc(name)}" type="password" ${required ? "required" : ""} placeholder="${esc(placeholder)}" autocomplete="${esc(autocomplete)}" />
+        <button type="button" class="btn-eye" data-toggle-pass aria-label="Mostrar u ocultar contraseña" title="Mostrar u ocultar contraseña">
+          ${ICON_EYE}
+        </button>
+      </div>
+    </div>`;
+}
+
+export function enlazarCriterios(contenedor) {
   $$("[data-email-check]", contenedor).forEach((box) => {
     const input = box.querySelector("input");
     const actualizar = () => {
@@ -153,6 +175,7 @@ export function abrirModal(html, { sm = false } = {}) {
   panel.classList.toggle("modal-sm", sm);
   panel.innerHTML = html;
   m.classList.remove("hidden");
+  document.body.classList.add("has-modal-open");
   document.body.style.overflow = "hidden";
   enlazarCriterios(panel);
 }
@@ -162,6 +185,7 @@ export function cerrarModal() {
   const panel = $("#modal-panel");
   panel.classList.remove("modal-sm");
   panel.innerHTML = "";
+  document.body.classList.remove("has-modal-open");
   document.body.style.overflow = "";
 }
 
