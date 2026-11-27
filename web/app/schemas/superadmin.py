@@ -2,7 +2,9 @@
 import uuid
 from datetime import date, datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.schemas.common import validar_clave_segura
 
 
 class SuperResumenOut(BaseModel):
@@ -208,3 +210,14 @@ class PurgaCuentaOut(BaseModel):
     claves_api_eliminadas: int = 0
     actividades_eliminadas: int = 0
     cuenta_eliminada: bool = False
+
+
+class RestablecerCredencialesIn(BaseModel):
+    clave_actual_super: str = Field(min_length=1, max_length=72)
+    correo: EmailStr | None = None
+    clave_nueva: str | None = Field(default=None, min_length=8, max_length=72)
+
+    @field_validator("clave_nueva")
+    @classmethod
+    def _clave_nueva_valida(cls, v: str | None) -> str | None:
+        return validar_clave_segura(v)

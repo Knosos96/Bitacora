@@ -1,5 +1,6 @@
 import { esc } from "../../services/api.js";
 import { $, abrirModal, badge, toast } from "../../components/ui.js";
+import { abrirModalCredenciales } from "./credencialesModal.js";
 import { abrirModalPurga } from "./purgaModal.js";
 import { descargarCsv, fmtFecha, listaActividadHtml, tablaRegistrosDoc } from "./shared.js";
 
@@ -23,6 +24,9 @@ export async function verExpedienteCuenta(cuentaId, api, onDone = null) {
         <p class="muted text-sm" style="margin:0.15rem 0 0">${esc(c.correo)}</p>
       </div>
       <div class="row">
+        ${c.estado !== "eliminada" && c.id !== api.usuario?.id
+          ? `<button type="button" class="btn btn-sm" id="exp-credenciales">Credenciales</button>`
+          : ""}
         <button type="button" class="btn danger btn-sm" id="exp-purgar">Eliminar datos</button>
         <button type="button" class="btn soft btn-sm" id="exp-csv">Exportar CSV</button>
         <button type="button" class="btn soft btn-sm" id="exp-print">Imprimir</button>
@@ -89,6 +93,7 @@ export async function verExpedienteCuenta(cuentaId, api, onDone = null) {
     </div>
   `);
 
+  $("#exp-credenciales")?.addEventListener("click", () => abrirModalCredenciales(c.id, api, onDone, c));
   $("#exp-purgar").onclick = () => abrirModalPurga(c.id, api, onDone);
   $("#exp-csv").onclick = () => descargarCsv(
     api,

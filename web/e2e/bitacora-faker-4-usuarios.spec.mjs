@@ -274,6 +274,21 @@ test.describe("Pruebas E2E completas con Playwright + Faker.js (4 usuarios aleat
         await expect(page.locator('#main-nav a[href="#/tablero"]')).toBeHidden();
       }
 
+      // 2.6 Mi perfil (#/perfil): para U1 probamos cambiar su propio correo y contraseña desde la web
+      if (u.alias === "U1 Encargado") {
+        const nuevoCorreoU1 = `upd.${u.correo}`;
+        await page.locator('#main-nav a[href="#/perfil"]').click();
+        await expect(page.locator("#form-perfil-cuenta")).toBeVisible();
+        await page.locator('#form-perfil-cuenta input[name="correo"]').fill(nuevoCorreoU1);
+        await page.locator('#form-perfil-cuenta input[name="clave_nueva"]').fill(u.claveNueva);
+        await page.locator('#form-perfil-cuenta input[name="clave_confirmar"]').fill(u.claveNueva);
+        await page.locator('#form-perfil-cuenta input[name="clave_actual"]').fill(u.clave);
+        await page.locator('#form-perfil-cuenta button[type="submit"]').click();
+        await expect(page.locator("#contenido")).toContainText(nuevoCorreoU1);
+        u.correo = nuevoCorreoU1;
+        u.clave = u.claveNueva;
+      }
+
       actividadesPorUsuario.set(u.correo, data);
       await cerrarSesion(page);
     }
@@ -377,19 +392,36 @@ test.describe("Pruebas E2E completas con Playwright + Faker.js (4 usuarios aleat
     // 4.4 Mi perfil: cambiar nombre con Faker verificando clave actual y restaurar el original
     const nombreTemporalSuper = `Auditor ${faker.person.lastName()}`;
     await page.locator('#main-nav a[href="#/super/perfil"]').click();
-    await expect(page.locator("#form-super-perfil")).toBeVisible();
-    await page.locator('#form-super-perfil input[name="nombre"]').fill(nombreTemporalSuper);
-    await page.locator('#form-super-perfil input[name="clave_actual"]').fill(SUPER_CLAVE);
-    await page.locator('#form-super-perfil button[type="submit"]').click();
+    await expect(page.locator("#form-perfil-cuenta")).toBeVisible();
+    await page.locator('#form-perfil-cuenta input[name="nombre"]').fill(nombreTemporalSuper);
+    await page.locator('#form-perfil-cuenta input[name="clave_actual"]').fill(SUPER_CLAVE);
+    await page.locator('#form-perfil-cuenta button[type="submit"]').click();
     await expect(page.locator("#user-chip")).toContainText(nombreTemporalSuper);
 
-    await page.locator('#form-super-perfil input[name="nombre"]').fill("Superusuario ZGROUP");
-    await page.locator('#form-super-perfil input[name="clave_actual"]').fill(SUPER_CLAVE);
-    await page.locator('#form-super-perfil button[type="submit"]').click();
+    await page.locator('#form-perfil-cuenta input[name="nombre"]').fill("Superusuario ZGROUP");
+    await page.locator('#form-perfil-cuenta input[name="clave_actual"]').fill(SUPER_CLAVE);
+    await page.locator('#form-perfil-cuenta button[type="submit"]').click();
     await expect(page.locator("#user-chip")).toContainText("Superusuario ZGROUP");
 
-    // 4.5 Eliminar información seleccionada permanentemente (purga parcial en U3 y purga completa de los 4 usuarios de prueba)
+    // 4.5 Restablecer credenciales desde Superusuario sobre U1 y luego depurar las 4 cuentas de prueba
+    const u1 = usuarios[0];
+    const correoSuperReset = `sup.${u1.correo}`;
     await page.locator('#main-nav a[href="#/super/cuentas"]').click();
+    await page.locator("#sc-q").fill(u1.correo);
+    await expect(page.locator("#sc-tbody")).toContainText(u1.correo);
+    await page.locator("#sc-tbody [data-credenciales]").first().click();
+    await expect(page.locator("#form-super-credenciales")).toBeVisible();
+    await page.locator('#form-super-credenciales input[name="correo"]').fill(correoSuperReset);
+    await page.locator('#form-super-credenciales input[name="clave_nueva"]').fill(u1.clave);
+    await page.locator('#form-super-credenciales input[name="clave_confirmar"]').fill(u1.clave);
+    await page.locator('#form-super-credenciales input[name="clave_actual_super"]').fill(SUPER_CLAVE);
+    await page.locator('#form-super-credenciales button[type="submit"]').click();
+    await expect(page.locator("#modal")).toHaveClass(/hidden/);
+    await page.locator("#sc-q").fill(correoSuperReset);
+    await expect(page.locator("#sc-tbody")).toContainText(correoSuperReset);
+    u1.correo = correoSuperReset;
+
+    // 4.6 Eliminar información seleccionada permanentemente (purga parcial en U3 y purga completa de los 4 usuarios de prueba)
     await page.locator("#sc-q").fill(u3.correo);
     await expect(page.locator("#sc-tbody")).toContainText(u3.nombre);
     await page.locator("#sc-tbody [data-purgar]").first().click();

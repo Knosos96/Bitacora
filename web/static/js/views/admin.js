@@ -356,10 +356,12 @@ async function adminUsuarios(body, api) {
           <td><div class="cell-actions">
             <button type="button" class="btn btn-sm" data-rol="${u.id}" data-base="${esc(u.rol)}" data-custom="${u.rol_custom_id || ""}">Rol</button>
             <button type="button" class="btn btn-sm" data-clave="${u.id}">Clave</button>
-            <button type="button" class="btn btn-sm ${u.activo ? "ghost" : "ok"}" data-act="${u.id}" data-on="${u.activo ? "true" : "false"}">
-              ${u.activo ? "Desactivar" : "Activar"}
-            </button>
-            ${u.id !== yoId ? `<button type="button" class="btn danger btn-sm" data-del="${u.id}" data-nom="${esc(u.nombre)}">Eliminar</button>` : ""}
+            ${u.id !== yoId
+              ? `<button type="button" class="btn btn-sm ${u.activo ? "ghost" : "ok"}" data-act="${u.id}" data-on="${u.activo ? "true" : "false"}">
+                  ${u.activo ? "Desactivar" : "Activar"}
+                </button>
+                <button type="button" class="btn danger btn-sm" data-del="${u.id}" data-nom="${esc(u.nombre)}">Eliminar</button>`
+              : `<a href="#/perfil" class="btn soft btn-sm">Mi perfil</a>`}
           </div></td>
         </tr>`).join("")
       : `<tr><td colspan="5"><div class="empty-state" style="border:0">No hay usuarios que coincidan con el filtro.</div></td></tr>`;

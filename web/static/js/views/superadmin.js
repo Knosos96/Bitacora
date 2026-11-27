@@ -1,5 +1,6 @@
 import { renderActividad } from "./superadmin/actividad.js";
 import { renderArchivos } from "./superadmin/archivos.js";
+import { abrirModalCredenciales } from "./superadmin/credencialesModal.js";
 import { renderCuentas } from "./superadmin/cuentas.js";
 import { verExpedienteCuenta } from "./superadmin/expedienteModal.js";
 import { verFichaDocumental } from "./superadmin/fichaModal.js";
@@ -40,6 +41,11 @@ export async function vistaSuperadmin(box, path, ctx) {
     const btnExp = e.target.closest("[data-expediente]");
     if (btnExp) {
       await verExpedienteCuenta(btnExp.dataset.expediente, api, () => ctx.enrutar?.());
+      return;
+    }
+    const btnCred = e.target.closest("[data-credenciales]");
+    if (btnCred) {
+      await abrirModalCredenciales(btnCred.dataset.credenciales, api, () => ctx.enrutar?.());
       return;
     }
     const btnPurga = e.target.closest("[data-purgar]");

@@ -64,6 +64,9 @@ export async function renderCuentas(box, api) {
           <td>${c.actividades_count}</td>
           <td><div class="cell-actions">
             <button type="button" class="btn soft btn-sm" data-expediente="${c.id}">Ver expediente</button>
+            ${c.estado !== "eliminada" && c.id !== api.usuario?.id
+              ? `<button type="button" class="btn btn-sm" data-credenciales="${c.id}">Credenciales</button>`
+              : ""}
             <button type="button" class="btn danger btn-sm" data-purgar="${c.id}">Eliminar datos</button>
           </div></td>
         </tr>`).join("")

@@ -334,3 +334,58 @@ def test_purga_selectiva_y_eliminacion_total_cuenta(equipo):
     assert c.get(f"/api/v1/superadmin/registros/{ev_asis['folio']}", headers=h_super).status_code == 404
     # El evento del encargado permanece intacto
     assert c.get(f"/api/v1/superadmin/registros/{ev_enca['folio']}", headers=h_super).status_code == 200
+
+
+def test_superusuario_restablece_credenciales_cualquier_usuario(equipo):
+    c = equipo
+    h_super = _con_super(c)
+    jefe = entrar(c, "jefe@x.com")
+    asis = entrar(c, "asis@x.com")
+
+    jefe_id = c.get("/api/v1/auth/yo", headers=jefe).json()["id"]
+    asis_id = c.get("/api/v1/auth/yo", headers=asis).json()["id"]
+    super_id = c.get("/api/v1/auth/yo", headers=h_super).json()["id"]
+
+    # Autorización del superusuario requerida y no aplica sobre sí mismo
+    assert c.post(f"/api/v1/superadmin/cuentas/{jefe_id}/credenciales", headers=h_super, json={
+        "clave_actual_super": "Mala1234",
+        "correo": "nuevo.jefe@x.com",
+    }).status_code == 401
+    assert c.post(f"/api/v1/superadmin/cuentas/{super_id}/credenciales", headers=h_super, json={
+        "clave_actual_super": "SuperClave1",
+        "correo": "otro.super@x.com",
+    }).status_code == 400
+
+    # Correo duplicado -> 400
+    assert c.post(f"/api/v1/superadmin/cuentas/{jefe_id}/credenciales", headers=h_super, json={
+        "clave_actual_super": "SuperClave1",
+        "correo": "asis@x.com",
+    }).status_code == 400
+
+    # Superusuario restablece correo y contraseña del Jefe
+    r_jefe = c.post(f"/api/v1/superadmin/cuentas/{jefe_id}/credenciales", headers=h_super, json={
+        "clave_actual_super": "SuperClave1",
+        "correo": "jefe.recuperado@zgroup.com",
+        "clave_nueva": "JefeNuevo2026",
+    })
+    assert r_jefe.status_code == 200, r_jefe.text
+    assert r_jefe.json()["correo"] == "jefe.recuperado@zgroup.com"
+
+    # El token anterior del jefe queda revocado, el login viejo falla y el nuevo funciona
+    assert c.get("/api/v1/auth/yo", headers=jefe).status_code == 401
+    assert c.post("/api/v1/auth/login", json={"correo": "jefe@x.com", "clave": "clave12345"}).status_code == 401
+    assert c.post("/api/v1/auth/login", json={"correo": "jefe.recuperado@zgroup.com", "clave": "JefeNuevo2026"}).status_code == 200
+
+    # También puede restablecer la clave de un asistente
+    r_asis = c.post(f"/api/v1/superadmin/cuentas/{asis_id}/credenciales", headers=h_super, json={
+        "clave_actual_super": "SuperClave1",
+        "clave_nueva": "AsisNuevo99",
+    })
+    assert r_asis.status_code == 200
+    assert c.post("/api/v1/auth/login", json={"correo": "asis@x.com", "clave": "AsisNuevo99"}).status_code == 200
+
+    # Queda trazabilidad completa en ActividadBitacora sin exponer contraseñas
+    acts = c.get("/api/v1/superadmin/actividad", headers=h_super).json()
+    act_cred = next(a for a in acts if a["accion"] == "credenciales_restablecidas" and "jefe.recuperado@zgroup.com" in (a["titulo"] or ""))
+    assert "correo: jefe@x.com -> jefe.recuperado@zgroup.com" in act_cred["detalle"]
+    assert "JefeNuevo2026" not in act_cred["detalle"]

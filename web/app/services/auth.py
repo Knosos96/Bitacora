@@ -52,8 +52,8 @@ def actualizar_perfil(db: Session, usuario: Usuario, datos: PerfilPatch) -> Toke
     if datos.nombre is not None:
         nuevo_nombre = datos.nombre.strip()
         if nuevo_nombre != usuario.nombre:
+            cambios.append(f"nombre: {usuario.nombre} -> {nuevo_nombre}")
             usuario.nombre = nuevo_nombre
-            cambios.append("nombre")
 
     if datos.correo is not None:
         nuevo_correo = str(datos.correo).strip().lower()
@@ -77,8 +77,8 @@ def actualizar_perfil(db: Session, usuario: Usuario, datos: PerfilPatch) -> Toke
             if prev_eliminado is not None:
                 prev_eliminado.correo = f"{nuevo_correo}#del#{prev_eliminado.id}"
                 db.flush()
+            cambios.append(f"correo: {usuario.correo} -> {nuevo_correo}")
             usuario.correo = nuevo_correo
-            cambios.append("correo")
 
     if datos.clave_nueva is not None:
         usuario.clave_hash = hashear_clave(datos.clave_nueva)

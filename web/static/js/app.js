@@ -6,6 +6,7 @@ import { vistaPendientes } from "./views/pendientes.js";
 import { vistaBusqueda } from "./views/busqueda.js";
 import { vistaTablero } from "./views/tablero.js";
 import { vistaAdmin } from "./views/admin.js";
+import { vistaPerfil } from "./views/perfil.js";
 import { vistaSuperadmin } from "./views/superadmin.js";
 
 const api = new ClienteApi();
@@ -131,6 +132,11 @@ const cerrarSesion = () => {
 $("#btn-salir").addEventListener("click", cerrarSesion);
 $("#btn-salir-mobile").addEventListener("click", cerrarSesion);
 
+$("#user-pill")?.addEventListener("click", () => {
+  if (!api.autenticado) return;
+  location.hash = api.esSuperusuario ? "#/super/perfil" : "#/perfil";
+});
+
 /* ---------- Eventos de modal y tabla ---------- */
 $("#modal").addEventListener("click", (e) => {
   if (e.target.matches("[data-close-modal]")) cerrarModal();
@@ -196,6 +202,7 @@ async function enrutar() {
     else if (path === "/busqueda") await vistaBusqueda(box, params, ctx);
     else if (path === "/tablero") await vistaTablero(box, ctx);
     else if (path === "/admin") await vistaAdmin(box, ctx);
+    else if (path === "/perfil") await vistaPerfil(box, ctx);
     else if (path.startsWith("/evento/")) {
       await vistaHoy(box, ctx);
       await abrirDetalle(decodeURIComponent(path.slice("/evento/".length)), ctx);

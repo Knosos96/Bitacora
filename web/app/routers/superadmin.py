@@ -18,6 +18,7 @@ from app.schemas.superadmin import (
     PurgaResumenCuentaOut,
     RegistroDetalleOut,
     RegistroHistoricoOut,
+    RestablecerCredencialesIn,
     SuperArchivosOut,
     SuperPendientesOut,
     SuperResumenOut,
@@ -71,6 +72,16 @@ def purgar_cuenta(
     actor: Usuario = Depends(requiere_rol(Rol.superusuario)),
 ):
     return svc.purgar_datos_cuenta(db, cuenta_id, datos, actor)
+
+
+@router.post("/cuentas/{cuenta_id}/credenciales", response_model=CuentaHistoricaOut)
+def restablecer_credenciales(
+    cuenta_id: uuid.UUID,
+    datos: RestablecerCredencialesIn,
+    db: Session = Depends(get_db),
+    actor: Usuario = Depends(requiere_rol(Rol.superusuario)),
+):
+    return svc.restablecer_credenciales_cuenta(db, cuenta_id, datos, actor)
 
 
 @router.get("/registros", response_model=list[RegistroHistoricoOut])

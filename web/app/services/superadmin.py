@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.config import settings
 from app.core.enums import Estado, EstadoCompromiso, Rol, Tipo
+from app.core.security import hashear_clave, verificar_clave
 from app.models import (
     ActividadBitacora,
     Auditoria,
@@ -39,13 +40,14 @@ from app.schemas.superadmin import (
     RegistroDetalleOut,
     RegistroHistoricoOut,
     RespaldoArchivoOut,
+    RestablecerCredencialesIn,
     SeguimientoDocOut,
     SuperArchivosOut,
     SuperPendientesOut,
     SuperResumenOut,
 )
 from app.services.eventos import _celda, hoy_en_zona
-from app.services.historial import registrar_actividad, sincronizar_existentes
+from app.services.historial import registrar_actividad, sincronizar_cuenta, sincronizar_existentes
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 RESPALDOS_DIR = BASE_DIR / "respaldos"
@@ -861,3 +863,75 @@ def purgar_datos_cuenta(
         actividades_eliminadas=actividades_eliminadas,
         cuenta_eliminada=cuenta_eliminada,
     )
+
+
+def restablecer_credenciales_cuenta(
+    db: Session,
+    cuenta_id: uuid.UUID,
+    datos: RestablecerCredencialesIn,
+    actor: Usuario,
+) -> CuentaHistoricaOut:
+    """Permite al Superusuario restablecer el correo y/o contraseña de cualquier usuario operativo."""
+    if not verificar_clave(datos.clave_actual_super, actor.clave_hash):
+        raise HTTPException(401, "Tu contraseña de Superusuario es incorrecta")
+    if cuenta_id == actor.id:
+        raise HTTPException(400, "Para cambiar tus propias credenciales usa la sección Mi perfil")
+
+    u = db.scalar(
+        select(Usuario).options(joinedload(Usuario.rol_custom)).where(Usuario.id == cuenta_id)
+    )
+    if u is None:
+        raise HTTPException(404, "Usuario no encontrado")
+    if u.eliminado_en is not None:
+        raise HTTPException(400, "No se pueden restablecer credenciales de una cuenta eliminada")
+
+    cambios: list[str] = []
+    if datos.correo is not None:
+        nuevo_correo = str(datos.correo).strip().lower()
+        if nuevo_correo != u.correo:
+            ocupado = db.scalar(
+                select(Usuario).where(
+                    Usuario.correo == nuevo_correo,
+                    Usuario.eliminado_en.is_(None),
+                    Usuario.id != u.id,
+                )
+            )
+            if ocupado is not None:
+                raise HTTPException(400, "Ya existe otro usuario con ese correo")
+            prev_eliminado = db.scalar(
+                select(Usuario).where(
+                    Usuario.correo == nuevo_correo,
+                    Usuario.eliminado_en.is_not(None),
+                    Usuario.id != u.id,
+                )
+            )
+            if prev_eliminado is not None:
+                prev_eliminado.correo = f"{nuevo_correo}#del#{prev_eliminado.id}"
+                db.flush()
+            correo_anterior = u.correo
+            u.correo = nuevo_correo
+            cambios.append(f"correo: {correo_anterior} -> {nuevo_correo}")
+
+    if datos.clave_nueva is not None:
+        u.clave_hash = hashear_clave(datos.clave_nueva)
+        cambios.append("clave_restablecida")
+
+    if not cambios:
+        raise HTTPException(400, "No se detectaron cambios para aplicar")
+
+    db.flush()
+    sincronizar_cuenta(db, u)
+    registrar_actividad(
+        db,
+        actor,
+        accion="credenciales_restablecidas",
+        entidad="usuario",
+        entidad_id=str(u.id),
+        titulo=f"{u.nombre} ({u.correo})",
+        detalle="Restablecido por Superusuario: " + ", ".join(cambios),
+    )
+    db.commit()
+
+    cuenta = db.get(CuentaHistorica, u.id)
+    ev_counts, inc_counts, pen_counts, act_counts = _mapas_cuentas(db)
+    return _cuenta_out(cuenta, ev_counts, inc_counts, pen_counts, act_counts)
